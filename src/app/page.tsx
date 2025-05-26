@@ -5,11 +5,20 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import JournalCalendar from '@/components/JournalCalendar';
-import { format, subDays } from 'date-fns';
 import DateSelector from '@/components/DateSelector';
-import ChatHistory from '@/components/ChatHistory';
 import ChatHistoryModal from '@/components/ChatHistoryModal';
+import { Sparkles } from 'lucide-react';
+
+// Add animation keyframes to your global CSS or add them here
+const floatAnimation = {
+  '0%, 100%': { transform: 'translateY(0)' },
+  '50%': { transform: 'translateY(-20px)' }
+};
+
+const fadeIn = {
+  '0%': { opacity: 0, transform: 'translateY(10px)' },
+  '100%': { opacity: 1, transform: 'translateY(0)' }
+};
 
 const cuddles = [
   { id: 'ellie-sr', name: 'Ellie Sr.', image: '/assets/Ellie Sr.png' },
@@ -106,8 +115,9 @@ export default function Home() {
       // Get stored user ID
       const storedUserId = localStorage.getItem('soul_journal_user_id');
       if (!storedUserId) {
-        console.error('No user ID available');
-        return;
+        // If no user ID, prompt them to start journaling first
+        setSelectedCuddle('ellie-sr'); // Set a default cuddle
+        return; // Don't open modal, they need to start journaling first
       }
 
       console.log('Fetching chat for date:', date, 'user:', storedUserId);
@@ -202,11 +212,12 @@ export default function Home() {
       {/* Header */}
       <header className="fixed top-0 w-full bg-background/80 backdrop-blur-sm z-50 p-4 border-b border-primary/10">
         <div className="max-w-3xl mx-auto">
-          <Image
+        <Image
             src="/assets/Logo.png"
             alt="Soul Logo"
             width={100}
             height={32}
+          priority
             className="h-8 w-auto cursor-pointer"
             onClick={() => router.push('/')}
           />
@@ -214,66 +225,96 @@ export default function Home() {
       </header>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4">
-        <div className="max-w-7xl mx-auto text-center">
-          <motion.h1 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-4xl sm:text-5xl md:text-6xl font-semibold text-primary mb-6 tracking-[0.02em] leading-tight"
-          >
-            Journal with Your Favorite Cuddle ✨
-          </motion.h1>
-          <motion.p 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="text-lg sm:text-xl text-gray-700 mb-12 leading-relaxed"
-          >
-            A cozy space to reflect, breathe, and grow—one entry at a time 🌱
-          </motion.p>
-          
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8 max-w-4xl mx-auto mb-12"
-          >
-            {['ellie-sr', 'ellie-jr', 'olly-sr', 'olly-jr'].map((cuddle) => (
-              <motion.button
-                key={cuddle}
-                onClick={() => handleCuddleSelect(cuddle)}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className={`p-3 sm:p-4 rounded-2xl border-2 transition-colors ${
-                  selectedCuddle === cuddle
-                    ? 'border-primary bg-primary/5'
-                    : 'border-primary/20 hover:border-primary/50'
-                }`}
-              >
-                <div className="aspect-square relative mb-2">
-                  <Image
-                    src={`/assets/${cuddle.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}.png`}
-                    alt={cuddle}
-                    fill
-                    className="object-contain"
-                  />
-                </div>
-                <p className="text-center font-medium text-sm sm:text-base">
-                  {cuddle.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                </p>
-              </motion.button>
-            ))}
-          </motion.div>
+      <section className="min-h-screen bg-gradient-to-br from-cream via-warm-cream to-soft-pink relative overflow-hidden">
+        {/* Decorative background elements */}
+        <div className="absolute inset-0">
+          <div className="absolute top-20 left-10 w-32 h-32 bg-primary/5 rounded-full blur-xl animate-float"></div>
+          <div className="absolute top-40 right-20 w-24 h-24 bg-primary/10 rounded-full blur-lg animate-float" style={{animationDelay: '1s'}}></div>
+          <div className="absolute bottom-20 left-20 w-40 h-40 bg-light-purple/30 rounded-full blur-2xl animate-float" style={{animationDelay: '2s'}}></div>
+          <div className="absolute bottom-40 right-10 w-20 h-20 bg-primary/8 rounded-full blur-lg animate-float" style={{animationDelay: '0.5s'}}></div>
+        </div>
 
-          <motion.button
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            onClick={handleStartJournaling}
-            className="bg-primary text-white px-6 sm:px-8 py-3 sm:py-4 rounded-full text-base sm:text-lg font-medium hover:bg-primary/90 transition-colors"
-          >
-            Start Your Journey
-          </motion.button>
+        <div className="relative z-10 container mx-auto px-4 py-20 flex flex-col lg:flex-row items-center justify-between min-h-screen">
+          {/* Left side - Content */}
+          <div className="flex-1 pt-20max-w-2xl animate-fade-in">
+            <div className="mb-6">
+              <motion.span 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium mb-6"
+              >
+                <Sparkles className="w-4 h-4" />
+                Start Your Journey Today
+              </motion.span>
+            </div>
+            
+            <motion.h1 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="text-5xl lg:text-7xl font-bold text-gray-800 mb-6 leading-tight"
+            >
+              Let's{" "}
+              <span className="text-primary relative">
+                untangle
+                <div className="absolute -bottom-2 left-0 w-full h-1 bg-gradient-to-r from-primary/40 to-primary/20 rounded-full"></div>
+              </span>
+            </motion.h1>
+
+            <motion.p 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8 }}
+              className="text-lg text-gray-500 mb-10 leading-relaxed max-w-xl"
+            >
+              Journal with your Cuddle™ — your soft-hearted companion who listens without judgment, comforts without words, and helps you find calm in the chaos 💜🫶🏼
+            </motion.p>
+
+            {/* Cuddle Selection */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1 }}
+              className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8 max-w-4xl mb-12"
+            >
+              {['ellie-sr', 'ellie-jr', 'olly-sr', 'olly-jr'].map((cuddle) => (
+                <motion.button
+                  key={cuddle}
+                  onClick={() => handleCuddleSelect(cuddle)}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className={`p-3 sm:p-4 rounded-2xl border-2 transition-colors ${
+                    selectedCuddle === cuddle
+                      ? 'border-primary bg-primary/5'
+                      : 'border-primary/20 hover:border-primary/50'
+                  }`}
+                >
+                  <div className="aspect-square relative mb-2">
+                    <Image
+                      src={`/assets/${cuddle.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}.png`}
+                      alt={cuddle}
+                      fill
+                      className="object-contain"
+                    />
+                  </div>
+                  <p className="text-center font-medium text-sm sm:text-base">
+                    {cuddle.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                  </p>
+                </motion.button>
+              ))}
+            </motion.div>
+
+            <motion.button
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.2 }}
+              onClick={handleStartJournaling}
+              className="bg-primary text-white px-6 sm:px-8 py-3 sm:py-4 rounded-full text-base sm:text-lg font-medium hover:bg-primary/90 transition-colors"
+            >
+              Start Your Journey
+            </motion.button>
+          </div>
         </div>
       </section>
 
@@ -309,7 +350,7 @@ export default function Home() {
       </section>
 
       {/* Your Space Section */}
-      <section className="py-20 px-4">
+      <section className="pt-20 px-4">
         <div className="max-w-7xl mx-auto">
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
@@ -357,8 +398,8 @@ export default function Home() {
                     height={48}
                     className="mb-4"
                   />
-                  <h3 className="text-xl font-semibold text-black mb-4 tracking-[0.02em]">{feature.title}</h3>
-                  <p className="text-gray-700 leading-relaxed">{feature.description}</p>
+                  <h3 className="text-xl font-semibold text-primary mb-4 tracking-[0.02em] ">{feature.title}</h3>
+                  <p className="text-primary/80 leading-relaxed">{feature.description}</p>
                 </div>
               </motion.div>
             ))}
