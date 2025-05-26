@@ -73,7 +73,7 @@ function AnimatedNumber({ value, suffix }: { value: number; suffix: string }) {
 export default function Home() {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedCuddle, setSelectedCuddle] = useState<string | null>(null);
+  const [selectedCuddle, setSelectedCuddle] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [userId, setUserId] = useState<string>('');
@@ -92,62 +92,32 @@ export default function Home() {
   }, [] as typeof chatMessages);
 
   useEffect(() => {
-    const getUserId = async () => {
-      try {
-        // Check if we already have a user ID in localStorage
-        const storedUserId = localStorage.getItem('userId');
-        if (storedUserId) {
-          setUserId(storedUserId);
-          return;
-        }
-
-        // If no stored user ID, create a new anonymous user
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user) {
-          // Generate a unique anonymous email
-          const anonymousEmail = `anonymous_${Date.now()}_${Math.random().toString(36).slice(2)}@soulspace.app`;
-          const { data: { user: newUser }, error } = await supabase.auth.signUp({
-            email: anonymousEmail,
-            password: Math.random().toString(36).slice(-8),
-          });
-
-          if (error) {
-            console.error('Error creating user:', error);
-            return;
-          }
-
-          if (newUser) {
-            setUserId(newUser.id);
-            localStorage.setItem('userId', newUser.id);
-          }
-        } else {
-          setUserId(user.id);
-          localStorage.setItem('userId', user.id);
-        }
-      } catch (error) {
-        console.error('Error in getUserId:', error);
-      }
-    };
-
-    getUserId();
+    // Retrieve user ID from localStorage if it exists
+    const storedUserId = localStorage.getItem('soul_journal_user_id');
+    if (storedUserId) {
+      setUserId(storedUserId);
+    }
   }, []);
 
   const handleDateSelect = async (date: string) => {
     try {
       setSelectedDate(date);
       
-      if (!userId) {
+      // Get stored user ID
+      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      if (!storedUserId) {
         console.error('No user ID available');
         return;
       }
 
+      console.log('Fetching chat for date:', date, 'user:', storedUserId);
+      
       // Fetch chat messages for the selected date and user
       const { data: chat, error } = await supabase
         .from('chats')
-        .select('messages')
+        .select('*')
         .eq('date', date)
-        .eq('user_id', userId)
+        .eq('user_id', storedUserId)
         .single();
 
       if (error) {
@@ -175,16 +145,47 @@ export default function Home() {
 
   const handleCuddleSelect = (cuddleId: string) => {
     setSelectedCuddle(cuddleId);
-    localStorage.setItem('selectedCuddle', cuddleId);
   };
 
-  const handleStartJournaling = () => {
-     // Generate a temporary session ID
-     const tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-     console.log('Generated temp session ID:', tempSessionId);
+  const handleStartJournaling = async () => {
+    if (!selectedCuddle) return;
 
-    if (selectedCuddle) {
-      router.push(`/journal?cuddle=${selectedCuddle}&userId=${userId}`);
+    try {
+      // Check for existing user ID in both localStorage and Supabase
+      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      
+      if (!storedUserId) {
+        // Create new user in Supabase first
+        const tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        console.log('Creating new user with temp session:', tempSessionId);
+
+        const { data: newUser, error: createError } = await supabase
+          .from('users')
+          .insert({
+            temp_session_id: tempSessionId
+          })
+          .select('id')
+          .single();
+
+        if (createError) {
+          console.error('Error creating user in Supabase:', createError);
+          return;
+        }
+
+        if (!newUser?.id) {
+          console.error('Failed to create user - no ID returned');
+          return;
+        }
+
+        // Only store in localStorage after successful Supabase creation
+        localStorage.setItem('soul_journal_user_id', newUser.id);
+        console.log('Successfully created user:', newUser.id);
+      }
+
+      // At this point we have a valid user ID either from storage or newly created
+      router.push(`/journal?cuddle=${selectedCuddle}`);
+    } catch (error) {
+      console.error('Error in handleStartJournaling:', error);
     }
   };
 
