@@ -1,16 +1,6 @@
 /** @type {import('next').NextConfig} */
-
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
+const nextConfig = {
   output: 'standalone',
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@': '/app/src'
-    };
-    return config;
-  }
 };
 
-module.exports = nextConfig;
+export default nextConfig;
