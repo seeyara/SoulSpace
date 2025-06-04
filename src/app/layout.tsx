@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from 'next/font/local';
 import "./globals.css";
+import BottomNav from '@/components/BottomNav';
 
 const harmoniaSans = localFont({
   src: '../assets/fonts/HarmoniaSans.woff2',
@@ -17,11 +18,16 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en" className={harmoniaSans.variable}>
-      <body className="font-harmonia">{children}</body>
+      <body className="font-harmonia">
+        <main className="pb-20">
+          {children}
+        </main>
+        <BottomNav />
+      </body>
     </html>
   );
 }
