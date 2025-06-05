@@ -17,6 +17,7 @@ export default function Account() {
   const [showChatHistory, setShowChatHistory] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [selectedCuddle, setSelectedCuddle] = useState('ellie-sr');
+  const [memberSince, setMemberSince] = useState<string>('');
   const router = useRouter();
 
   useEffect(() => {
@@ -44,10 +45,13 @@ export default function Account() {
     const { data, error } = await supabase
       .from('chats')
       .select('date')
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .order('date', { ascending: true });
 
-    if (data) {
+    if (data && data.length > 0) {
       setEntries(data.map(entry => entry.date));
+      const firstEntry = new Date(data[0].date);
+      setMemberSince(format(firstEntry, 'd MMMM yyyy'));
     }
   };
 
@@ -85,6 +89,23 @@ export default function Account() {
     return eachDayOfInterval({ start, end });
   };
 
+  const getCuddleImage = (id: string) => {
+    switch(id) {
+      case 'olly-sr':
+        return '/assets/Olly Sr.png';
+      case 'olly-jr':
+        return '/assets/Olly Jr.png';
+      case 'ellie-jr':
+        return '/assets/Ellie Jr.png';
+      default:
+        return '/assets/Ellie Sr.png';
+    }
+  };
+
+  const getCuddleName = (id: string) => {
+    return id.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -108,7 +129,7 @@ export default function Account() {
         animate={{ opacity: 1, y: 0 }}
         className="max-w-xl mx-auto px-4 pt-20"
       >
-        <div className="flex items-center gap-6 mb-12">
+        <div className="flex items-center gap-6 mb-8">
           <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
             <span className="text-2xl text-primary font-semibold">
               {userName.charAt(0)}
@@ -118,18 +139,18 @@ export default function Account() {
             <h1 className="text-2xl font-semibold text-gray-900 mb-1">
               {userName}
             </h1>
-            <p className="text-gray-500"> Member since 26 May 2025
+            <p className="text-gray-500">
+              Member since {memberSince || 'Today'}
             </p>
           </div>
         </div>
-
 
         {/* Quote */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35 }}
-          className="mb-12 text-center"
+          className="mb-8 text-center"
         >
           <p className="text-lg text-primary/80 italic">
             "Eighty percent of success is showing up."
@@ -139,16 +160,37 @@ export default function Account() {
           </p>
         </motion.div>
 
-        {/* Stats */}
-        <div className="grid gap-4 mb-12">
+        {/* Stats and Cuddle Companion */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-white/60 backdrop-blur-sm p-6 rounded-2xl border-2 border-primary/5 hover:border-primary/10 transition-all"
+            className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border-2 border-primary/5 hover:border-primary/10 transition-all"
           >
-            <h3 className="text-sm text-gray-500 mb-2">Current Streak</h3>
-            <p className="text-3xl font-semibold text-primary">3 days</p>
+            <h3 className="text-sm text-gray-500 mb-1">Current Streak</h3>
+            <p className="text-2xl font-semibold text-primary">3 days</p>
+          </motion.div>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border-2 border-primary/5 hover:border-primary/10 transition-all col-span-2"
+          >
+            <h3 className="text-sm text-gray-500 mb-2">Your Cuddle 💜</h3>
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 rounded-full bg-primary/5 flex items-center justify-center overflow-hidden">
+                <Image
+                  src={getCuddleImage(selectedCuddle)}
+                  alt={getCuddleName(selectedCuddle)}
+                  width={48}
+                  height={48}
+                  className="object-cover"
+                />
+              </div>
+              <p className="text-lg font-medium text-primary">{getCuddleName(selectedCuddle)}</p>
+            </div>
           </motion.div>
         </div>
 
@@ -205,6 +247,7 @@ export default function Account() {
           messages={chatMessages}
           onStartJournaling={handleStartJournaling}
           selectedCuddle={selectedCuddle}
+          cuddleName={getCuddleName(selectedCuddle)}
         />
       )}
     </div>

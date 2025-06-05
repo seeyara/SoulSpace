@@ -47,6 +47,11 @@ const benefits = [
 
 const features = [
   {
+    title: 'Private by Default',
+    description: 'Your space, your pace',
+    icon: '/assets/Key Round Icon.svg'
+  },
+  {
     title: 'Thoughtful Prompts',
     description: 'Begin your journey with gentle guidance',
     icon: '/assets/Hand Holding Gift Icon.svg'
@@ -55,11 +60,6 @@ const features = [
     title: 'Gentle Streaks',
     description: 'Build a habit, softly',
     icon: '/assets/Tick Circle Icon.svg'
-  },
-  {
-    title: 'Private by Default',
-    description: 'Your space, your pace',
-    icon: '/assets/Key Round Icon.svg'
   },
 ];
 
@@ -186,7 +186,7 @@ export default function Home() {
         <div className="relative z-10 container mx-auto px-4 py-20 flex flex-col lg:flex-row items-center justify-between min-h-screen">
           {/* Left side - Content */}
           <div className="flex-1 pt-20max-w-2xl animate-fade-in">
-            <div className="mb-1">
+            <div className="mb-1 pt-3">
               <motion.span 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
