@@ -1,13 +1,16 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import Image from 'next/image';
+import Account from '@/assets/Account';
+import CommunityIcon from '@/assets/CommunityIcon';
+import HomeIcon from '@/assets/HomeIcon';
+import JournalIcon from '@/assets/JournalIcon';
 
 const navItems = [
-  { name: 'Home', icon: '/assets/Home.svg', path: '/' },
-  { name: 'Journal', icon: '/assets/Journal.svg', path: '/journal' },
-  { name: 'Account', icon: '/assets/Account.svg', path: '/account' },
-  { name: 'Community', icon: '/assets/Community.svg', path: '/community' }
+  { name: 'Home', Icon: HomeIcon, path: '/' },
+  { name: 'Journal', Icon: JournalIcon, path: '/journal' },
+  { name: 'Account', Icon: Account, path: '/account' },
+  { name: 'Community', Icon: CommunityIcon, path: '/community' }
 ];
 
 export default function BottomNav() {
@@ -29,11 +32,7 @@ export default function BottomNav() {
                 }`}
               >
                 <div className={`p-2 rounded-xl ${isActive ? 'bg-primary/10' : 'hover:bg-primary/5'}`}>
-                  <Image
-                    src={item.icon}
-                    alt={item.name}
-                    width={28}
-                    height={28}
+                  <item.Icon
                     className={`w-6 h-6 transition-transform ${isActive ? 'scale-110' : 'scale-100'}`}
                   />
                 </div>

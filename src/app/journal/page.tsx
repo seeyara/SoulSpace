@@ -24,6 +24,7 @@ function JournalContent() {
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [usedPrompts, setUsedPrompts] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isWelcomeBack, setIsWelcomeBack] = useState(false);
 
   // Initialize user and start intro message
   useEffect(() => {
@@ -74,36 +75,39 @@ function JournalContent() {
     const startConversation = async () => {
       if (!isMounted) return;
       
-      setIsTyping(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (!isMounted) return;
-      
-      // Add intro message
-      const cuddle = cuddleData.cuddles[selectedCuddle];
-      setMessages([{ 
-        role: 'assistant', 
-        content: cuddle.intro
-      }]);
-      
-      setIsTyping(false);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      if (!isMounted) return;
-      
-      // Add first prompt
-      setIsTyping(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (!isMounted) return;
-      
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: cuddle.prompts[0]
-      }]);
-      
-      setIsTyping(false);
-      setShowInput(true);
+      // Only show intro if no previous messages
+      if (messages.length === 0) {
+        setIsTyping(true);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        if (!isMounted) return;
+        
+        // Add intro message
+        const cuddle = cuddleData.cuddles[selectedCuddle];
+        setMessages([{ 
+          role: 'assistant', 
+          content: cuddle.intro
+        }]);
+        
+        setIsTyping(false);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        if (!isMounted) return;
+        
+        // Add first prompt
+        setIsTyping(true);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        if (!isMounted) return;
+        
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: cuddle.prompts[0]
+        }]);
+        
+        setIsTyping(false);
+        setShowInput(true);
+      }
     };
 
     startConversation();
@@ -111,7 +115,7 @@ function JournalContent() {
     return () => {
       isMounted = false;
     };
-  }, [selectedCuddle]);
+  }, [selectedCuddle, messages.length]);
 
   // Group consecutive assistant messages
   const groupedMessages = messages.reduce((acc, message, index) => {
@@ -145,8 +149,22 @@ function JournalContent() {
         const response = await fetch(`/api/chat?userId=${storedUserId}&date=${today}`);
         const { data } = await response.json();
         
-        if (data?.messages) {
+        if (data?.messages && data.messages.length > 0) {
           setMessages(data.messages);
+          
+          // Add continuation message after loading chat history
+          setTimeout(() => {
+            setIsTyping(true);
+            setTimeout(() => {
+              setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: "Welcome back! Would you like to continue our conversation or finish this entry?"
+              }]);
+              setIsTyping(false);
+              setIsWelcomeBack(true);
+              setShowInput(true);
+            }, 1500);
+          }, 1000);
         }
       } catch (error) {
         console.error('Error fetching chat history:', error);
@@ -221,7 +239,10 @@ function JournalContent() {
 
       // Handle conversation ending
       if (shouldEnd) {
-        setShowStreakModal(true);
+        // Show streak modal after 5 seconds
+        setTimeout(() => {
+          setShowStreakModal(true);
+        }, 3000);
         return;
       }
 
@@ -351,6 +372,51 @@ function JournalContent() {
     } catch (error) {
       console.error('Error in handleFinishEntry:', error);
       setIsTyping(false);
+    }
+  };
+
+  const handleContinue = async () => {
+    setIsWelcomeBack(false);
+    setShowInput(false);
+    setIsTyping(true);
+
+    const continueMessage = { 
+      role: 'user' as const, 
+      content: "I'd like to continue our conversation." 
+    };
+    setMessages(prev => [...prev, continueMessage]);
+
+    try {
+      const response = await fetch('/api/chat-completion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: continueMessage.content,
+          cuddleId: selectedCuddle,
+          messageHistory: messages
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const { response: aiResponse } = await response.json();
+      
+      const assistantMessage = { 
+        role: 'assistant' as const, 
+        content: aiResponse
+      };
+
+      setIsTyping(false);
+      setMessages(prev => [...prev, assistantMessage]);
+      setShowInput(true);
+    } catch (error) {
+      console.error('Error in handleContinue:', error);
+      setIsTyping(false);
+      setShowInput(true);
     }
   };
 
@@ -491,31 +557,48 @@ function JournalContent() {
           {showInput && (
             <div className="flex justify-end">
               <div className="w-[80%]">
-                <form onSubmit={handleSubmit} className="space-y-2">
-                  <textarea
-                    value={userResponse}
-                    onChange={(e) => setUserResponse(e.target.value)}
-                    placeholder="Type your response..."
-                    rows={3}
-                    className="w-full p-4 rounded-2xl border-2 border-primary/20 focus:border-primary outline-none bg-white resize-none"
-                  />
+                {isWelcomeBack ? (
                   <div className="flex justify-end items-center gap-2">
                     <button
-                      type="button"
                       onClick={handleFinishEntry}
-                      className="text-primary/70 border-2 border-primary/20 px-2 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
+                      className="text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
                     >
                       Finish Entry
                     </button>
                     <button
-                      type="submit"
-                      disabled={!userResponse.trim()}
-                      className="bg-primary text-white px-6 py-2 rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                      onClick={handleContinue}
+                      className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors"
                     >
-                      Send
+                      Continue
                     </button>
                   </div>
-                </form>
+                ) : (
+                  <form onSubmit={handleSubmit} className="space-y-2">
+                    <textarea
+                      value={userResponse}
+                      onChange={(e) => setUserResponse(e.target.value)}
+                      placeholder="Type your response..."
+                      rows={3}
+                      className="w-full p-4 rounded-2xl border-2 border-primary/20 focus:border-primary outline-none bg-white resize-none"
+                    />
+                    <div className="flex justify-end items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleFinishEntry}
+                        className="text-primary/70 border-2 border-primary/20 px-2 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
+                      >
+                        Finish Entry
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!userResponse.trim()}
+                        className="bg-primary text-white px-6 py-2 rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           )}

@@ -6,12 +6,17 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 import { useRouter } from 'next/navigation';
+import ChatHistoryModal from '@/components/ChatHistoryModal';
 
 export default function Account() {
   const [userName, setUserName] = useState('Divya Singh');
   const [entries, setEntries] = useState<string[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [userId, setUserId] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showChatHistory, setShowChatHistory] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [selectedCuddle, setSelectedCuddle] = useState('ellie-sr');
   const router = useRouter();
 
   useEffect(() => {
@@ -43,6 +48,34 @@ export default function Account() {
 
     if (data) {
       setEntries(data.map(entry => entry.date));
+    }
+  };
+
+  const fetchChatHistory = async (date: string) => {
+    try {
+      const response = await fetch(`/api/chat?userId=${userId}&date=${date}`);
+      const { data } = await response.json();
+      
+      if (data?.messages) {
+        setChatMessages(data.messages);
+        setShowChatHistory(true);
+      }
+    } catch (error) {
+      console.error('Error fetching chat history:', error);
+      setChatMessages([]);
+      setShowChatHistory(true);
+    }
+  };
+
+  const handleDateClick = (date: Date) => {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    setSelectedDate(dateStr);
+    fetchChatHistory(dateStr);
+  };
+
+  const handleStartJournaling = () => {
+    if (selectedDate) {
+      router.push(`/journal?cuddle=${selectedCuddle}`);
     }
   };
 
@@ -90,27 +123,6 @@ export default function Account() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 mb-12">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-white/60 backdrop-blur-sm p-6 rounded-2xl border-2 border-primary/5 hover:border-primary/10 transition-all"
-          >
-            <h3 className="text-sm text-gray-500 mb-2">Total Entries</h3>
-            <p className="text-3xl font-semibold text-primary">{entries.length}</p>
-          </motion.div>
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-white/60 backdrop-blur-sm p-6 rounded-2xl border-2 border-primary/5 hover:border-primary/10 transition-all"
-          >
-            <h3 className="text-sm text-gray-500 mb-2">Current Streak</h3>
-            <p className="text-3xl font-semibold text-primary">3 days</p>
-          </motion.div>
-        </div>
 
         {/* Quote */}
         <motion.div
@@ -126,6 +138,19 @@ export default function Account() {
             - Woody Allen
           </p>
         </motion.div>
+
+        {/* Stats */}
+        <div className="grid gap-4 mb-12">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white/60 backdrop-blur-sm p-6 rounded-2xl border-2 border-primary/5 hover:border-primary/10 transition-all"
+          >
+            <h3 className="text-sm text-gray-500 mb-2">Current Streak</h3>
+            <p className="text-3xl font-semibold text-primary">3 days</p>
+          </motion.div>
+        </div>
 
         {/* Calendar */}
         <motion.div 
@@ -158,8 +183,9 @@ export default function Account() {
               return (
                 <div
                   key={dateStr}
-                  className={`aspect-square rounded-xl flex items-center justify-center ${
-                    hasEntry ? 'bg-primary text-white' : 'hover:bg-primary/5'
+                  onClick={() => handleDateClick(date)}
+                  className={`aspect-square rounded-xl flex items-center justify-center cursor-pointer transition-all ${
+                    hasEntry ? 'bg-primary text-white hover:bg-primary/90' : 'hover:bg-primary/5'
                   }`}
                 >
                   <span className="text-sm">{format(date, 'd')}</span>
@@ -169,6 +195,18 @@ export default function Account() {
           </div>
         </motion.div>
       </motion.div>
+
+      {/* Chat History Modal */}
+      {selectedDate && (
+        <ChatHistoryModal
+          isOpen={showChatHistory}
+          onClose={() => setShowChatHistory(false)}
+          date={selectedDate}
+          messages={chatMessages}
+          onStartJournaling={handleStartJournaling}
+          selectedCuddle={selectedCuddle}
+        />
+      )}
     </div>
   );
 } 
