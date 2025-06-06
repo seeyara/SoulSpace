@@ -77,7 +77,7 @@ export default function Account() {
         console.error('Error fetching user data:', error);
         // For new users or error cases, generate and save a new name
         const storedName = localStorage.getItem('soul_journal_anonymous_name');
-        const nameToUse = storedName || generateAnonymousName();
+        const nameToUse = storedName || "UserName";
         
         if (!storedName) {
           localStorage.setItem('soul_journal_anonymous_name', nameToUse);
