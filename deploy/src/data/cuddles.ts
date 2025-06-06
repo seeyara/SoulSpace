@@ -24,7 +24,7 @@ export const cuddleData: CuddleData = {
       "name": "Ellie Jr.",
       "intro": "Hi hi! I'm Ellie Jr.—ready to listen, play, and help you share anything on your mind. Nothing's too big or too small.",
       "prompts": [
-        "What's something you're looking forward to?",
+        "What's something you're looking forward to today?",
         "What was the best part of your day so far?",
         "If you could wish for one fun thing right now, what would it be?"
       ]

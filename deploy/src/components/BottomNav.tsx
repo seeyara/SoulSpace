@@ -1,13 +1,16 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import Image from 'next/image';
+import Account from '@/assets/Account';
+import CommunityIcon from '@/assets/CommunityIcon';
+import HomeIcon from '@/assets/HomeIcon';
+import JournalIcon from '@/assets/JournalIcon';
 
 const navItems = [
-  { name: 'Home', icon: '/assets/Home.svg', path: '/' },
-  { name: 'Journal', icon: '/assets/Journal.svg', path: '/journal' },
-  { name: 'Account', icon: '/assets/Account.svg', path: '/account' },
-  { name: 'Community', icon: '/assets/Community.svg', path: '/community' }
+  { name: 'Home', Icon: HomeIcon, path: '/' },
+  { name: 'Journal', Icon: JournalIcon, path: '/journal' },
+  { name: 'Account', Icon: Account, path: '/account' },
+  { name: 'Community', Icon: CommunityIcon, path: '/community' }
 ];
 
 export default function BottomNav() {
@@ -15,33 +18,61 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-primary/10 z-50">
-      <div className="max-w-xl mx-auto px-4">
-        <div className="flex justify-between items-center h-16">
-          {navItems.map((item) => {
-            const isActive = pathname === item.path;
-            return (
-              <button
-                key={item.name}
-                onClick={() => router.push(item.path)}
-                className={`flex items-center justify-center w-12 h-12 rounded-xl transition-colors ${
-                  isActive ? 'text-primary' : 'text-gray-500 hover:text-primary/80'
-                }`}
-              >
-                <div className={`p-2 rounded-xl ${isActive ? 'bg-primary/10' : 'hover:bg-primary/5'}`}>
-                  <Image
-                    src={item.icon}
-                    alt={item.name}
-                    width={28}
-                    height={28}
-                    className={`w-6 h-6 transition-transform ${isActive ? 'scale-110' : 'scale-100'}`}
-                  />
-                </div>
-              </button>
-            );
-          })}
+    <div className="fixed bottom-0 left-0 right-0 z-50">
+      {/* Web Navigation */}
+      <nav className="hidden md:block bg-white border-t border-primary/10">
+        <div className="max-w-screen-xl mx-auto px-4">
+          <div className="flex justify-center items-center h-14 gap-8">
+            {navItems.map((item) => {
+              const isActive = pathname === item.path;
+              return (
+                <button
+                  key={item.name}
+                  onClick={() => router.push(item.path)}
+                  className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all ${
+                    isActive ? 'text-primary' : 'text-gray-500 hover:text-primary/80'
+                  }`}
+                >
+                  <div className={`p-2 rounded-xl ${isActive ? 'bg-primary/10' : 'hover:bg-primary/5'}`}>
+                    <item.Icon
+                      className={`w-6 h-6 transition-transform ${isActive ? 'scale-110' : 'scale-100'}`}
+                    />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+
+      {/* Mobile Navigation */}
+      <nav className="md:hidden bg-white border-t border-primary/10">
+        <div className="max-w-xl mx-auto px-4">
+          <div className="flex justify-between items-center h-14">
+            {navItems.map((item) => {
+              const isActive = pathname === item.path;
+              return (
+                <button
+                  key={item.name}
+                  onClick={() => router.push(item.path)}
+                  className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all ${
+                    isActive ? 'text-primary' : 'text-gray-500 hover:text-primary/80'
+                  }`}
+                >
+                  <div className={`p-2 rounded-xl ${isActive ? 'bg-primary/10' : 'hover:bg-primary/5'}`}>
+                    <item.Icon
+                      className={`w-6 h-6 transition-transform ${isActive ? 'scale-110' : 'scale-100'}`}
+                    />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </nav>
+
+      {/* Safe Area Padding for Mobile Devices */}
+      <div className="h-[env(safe-area-inset-bottom)] bg-white" />
+    </div>
   );
 } 

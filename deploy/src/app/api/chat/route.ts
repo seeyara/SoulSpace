@@ -51,7 +51,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await supabase
       .from('chats')
-      .select('*')
+      .select('messages, cuddle_id')
       .eq('user_id', userId)
       .eq('date', date)
       .single();
@@ -60,7 +60,16 @@ export async function GET(request: Request) {
       throw error;
     }
 
-    return NextResponse.json({ data: data || null });
+    if (data) {
+      return NextResponse.json({ 
+        data: {
+          messages: data.messages,
+          cuddleId: data.cuddle_id
+        }
+      });
+    }
+
+    return NextResponse.json({ data: null });
   } catch (error) {
     console.error('Error fetching chat:', error);
     return NextResponse.json(

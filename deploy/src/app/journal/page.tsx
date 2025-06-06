@@ -10,6 +10,9 @@ import type { CuddleId } from '@/types/cuddles';
 import StreakModal from '@/components/StreakModal';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
+import { generateAnonymousName } from '@/lib/utils/nameGenerator';
+
+const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue our conversation or finish this entry?";
 
 function JournalContent() {
   const searchParams = useSearchParams();
@@ -24,40 +27,93 @@ function JournalContent() {
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [usedPrompts, setUsedPrompts] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isWelcomeBack, setIsWelcomeBack] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [anonymousName, setAnonymousName] = useState<string>('');
 
   // Initialize user and start intro message
   useEffect(() => {
     const initializeUser = async () => {
       try {
         const storedUserId = localStorage.getItem('soul_journal_user_id');
+        const storedName = localStorage.getItem('soul_journal_anonymous_name');
         
         if (storedUserId) {
           console.log('Using stored user ID:', storedUserId);
           setUserId(storedUserId);
+          
+          if (storedName) {
+            setAnonymousName(storedName);
+            // Ensure name is in database
+            try {
+              await fetch('/api/users', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  userId: storedUserId,
+                  name: storedName
+                }),
+              });
+            } catch (error) {
+              console.error('Error syncing name to database:', error);
+            }
+          } else {
+            // Generate new name if none exists
+            const generatedName = generateAnonymousName();
+            try {
+              const response = await fetch('/api/users', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  userId: storedUserId,
+                  name: generatedName
+                }),
+              });
+              
+              if (response.ok) {
+                setAnonymousName(generatedName);
+                localStorage.setItem('soul_journal_anonymous_name', generatedName);
+              }
+            } catch (error) {
+              console.error('Error saving new name:', error);
+            }
+          }
           return;
         }
 
+        // Create new user with generated name
+        const generatedName = generateAnonymousName();
         const tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        console.log('Generated temp session ID:', tempSessionId);
+        
+        try {
+          const { data: newUser, error: createError } = await supabase
+            .from('users')
+            .insert({
+              temp_session_id: tempSessionId,
+              name: generatedName
+            })
+            .select('id')
+            .single();
 
-        const { data: newUser, error: createError } = await supabase
-          .from('users')
-          .insert({
-            temp_session_id: tempSessionId
-          })
-          .select('id')
-          .single();
+          if (createError) {
+            console.error('Error creating user:', createError);
+            return;
+          }
 
-        if (createError) {
-          console.error('Error creating user:', createError);
-          return;
-        }
-
-        if (newUser) {
-          const newUserId = newUser.id;
-          console.log('Created new user:', newUserId);
-          localStorage.setItem('soul_journal_user_id', newUserId);
-          setUserId(newUserId);
+          if (newUser) {
+            const newUserId = newUser.id;
+            console.log('Created new user:', newUserId);
+            localStorage.setItem('soul_journal_user_id', newUserId);
+            localStorage.setItem('soul_journal_anonymous_name', generatedName);
+            setUserId(newUserId);
+            setAnonymousName(generatedName);
+          }
+        } catch (error) {
+          console.error('Error in user creation:', error);
         }
       } catch (error) {
         console.error('Error in initializeUser:', error);
@@ -66,52 +122,6 @@ function JournalContent() {
 
     initializeUser();
   }, []);
-
-  // Handle intro and first prompt
-  useEffect(() => {
-    let isMounted = true;
-    
-    const startConversation = async () => {
-      if (!isMounted) return;
-      
-      setIsTyping(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (!isMounted) return;
-      
-      // Add intro message
-      const cuddle = cuddleData.cuddles[selectedCuddle];
-      setMessages([{ 
-        role: 'assistant', 
-        content: cuddle.intro
-      }]);
-      
-      setIsTyping(false);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      if (!isMounted) return;
-      
-      // Add first prompt
-      setIsTyping(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (!isMounted) return;
-      
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: cuddle.prompts[0]
-      }]);
-      
-      setIsTyping(false);
-      setShowInput(true);
-    };
-
-    startConversation();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedCuddle]);
 
   // Group consecutive assistant messages
   const groupedMessages = messages.reduce((acc, message, index) => {
@@ -131,13 +141,32 @@ function JournalContent() {
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (messages.length > 10) {
+      scrollToBottom();
+    }
+    setIsInitialLoad(false);
+  }, [messages, isInitialLoad]);
 
   useEffect(() => {
     const fetchChatHistory = async () => {
       const storedUserId = localStorage.getItem('soul_journal_user_id');
-      if (!storedUserId) return;
+      if (!storedUserId) {
+        // Initialize new conversation if no user ID
+        const cuddle = cuddleData.cuddles[selectedCuddle];
+        setIsTyping(true);
+        setTimeout(() => {
+          setMessages([{ 
+            role: 'assistant', 
+            content: cuddle.intro
+          }, { 
+            role: 'assistant', 
+            content: cuddle.prompts[0]
+          }]);
+          setIsTyping(false);
+          setShowInput(true);
+        }, 1000);
+        return;
+      }
 
       const today = format(new Date(), 'yyyy-MM-dd');
       
@@ -145,22 +174,87 @@ function JournalContent() {
         const response = await fetch(`/api/chat?userId=${storedUserId}&date=${today}`);
         const { data } = await response.json();
         
-        if (data?.messages) {
+        if (data?.messages && data.messages.length > 0) {
+          // Check if the last message is already the welcome back message
+          const hasWelcomeBack = data.messages.some((msg: { role: 'user' | 'assistant'; content: string }) => 
+            msg.role === 'assistant' && 
+            msg.content === WELCOME_BACK_MESSAGE
+          );
+
           setMessages(data.messages);
+          
+          if (!hasWelcomeBack) {
+            // Add continuation message after loading chat history
+            setTimeout(() => {
+              setIsTyping(true);
+              setTimeout(() => {
+                setMessages(prev => [...prev, {
+                  role: 'assistant',
+                  content: WELCOME_BACK_MESSAGE
+                }]);
+                setIsTyping(false);
+                setIsWelcomeBack(true);
+                setShowInput(true);
+              }, 1500);
+            }, 1000);
+          } else {
+            setIsWelcomeBack(true);
+            setShowInput(true);
+          }
+        } else {
+          // Start a new conversation if no chat history
+          const cuddle = cuddleData.cuddles[selectedCuddle];
+          setIsTyping(true);
+          setTimeout(() => {
+            setMessages([{ 
+              role: 'assistant', 
+              content: cuddle.intro
+            }, { 
+              role: 'assistant', 
+              content: cuddle.prompts[0]
+            }]);
+            setIsTyping(false);
+            setShowInput(true);
+          }, 1000);
         }
       } catch (error) {
         console.error('Error fetching chat history:', error);
+        // Start a new conversation on error
+        const cuddle = cuddleData.cuddles[selectedCuddle];
+        setIsTyping(true);
+        setTimeout(() => {
+          setMessages([{ 
+            role: 'assistant', 
+            content: cuddle.intro
+          }, { 
+            role: 'assistant', 
+            content: cuddle.prompts[0]
+          }]);
+          setIsTyping(false);
+          setShowInput(true);
+        }, 1000);
       }
     };
 
     fetchChatHistory();
-  }, []);
+  }, [selectedCuddle]);
+
+  useEffect(() => {
+    // Load ongoing conversation from localStorage if exists
+    const ongoingConversation = localStorage.getItem('ongoing_journal_conversation');
+    if (ongoingConversation) {
+      const { messages: savedMessages, cuddle } = JSON.parse(ongoingConversation);
+      if (cuddle === selectedCuddle) {
+        setMessages(savedMessages);
+        setShowInput(true);
+      }
+    }
+  }, [selectedCuddle]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userResponse.trim()) return;
 
-    // Get stored user ID
     const storedUserId = localStorage.getItem('soul_journal_user_id');
     if (!storedUserId) {
       console.error('No user ID available');
@@ -175,7 +269,6 @@ function JournalContent() {
     setIsTyping(true);
 
     try {
-      // Get AI response
       const response = await fetch('/api/chat-completion', {
         method: 'POST',
         headers: {
@@ -199,35 +292,24 @@ function JournalContent() {
         content: aiResponse
       };
 
+      const updatedMessages = [...messages, userMessage, assistantMessage];
       setIsTyping(false);
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages(updatedMessages);
 
-      // Save the conversation
-      try {
-        await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messages: [...messages, userMessage, assistantMessage],
-            userId: storedUserId,
-            cuddleId: selectedCuddle
-          }),
-        });
-      } catch (error) {
-        console.error('Error saving chat:', error);
-      }
+      // Save to localStorage instead of database
+      localStorage.setItem('ongoing_journal_conversation', JSON.stringify({
+        messages: updatedMessages,
+        cuddle: selectedCuddle
+      }));
 
-      // Handle conversation ending
       if (shouldEnd) {
-        setShowStreakModal(true);
+        setTimeout(() => {
+          setShowStreakModal(true);
+        }, 3000);
         return;
       }
 
-      // Always show input after AI response unless conversation ended
       setShowInput(true);
-
     } catch (error) {
       console.error('Error in handleSubmit:', error);
       setIsTyping(false);
@@ -267,7 +349,7 @@ function JournalContent() {
 
   const handleCloseStreakModal = () => {
     setShowStreakModal(false);
-    window.location.href = '/';
+    router.push('/account');
   };
 
   const getCuddleName = (id: string) => {
@@ -299,7 +381,6 @@ function JournalContent() {
     setIsTyping(true);
 
     try {
-      // Get final AI response
       const response = await fetch('/api/chat-completion', {
         method: 'POST',
         headers: {
@@ -324,27 +405,30 @@ function JournalContent() {
         content: aiResponse
       };
 
+      const finalMessages = [...messages, farewellMessage];
       setIsTyping(false);
-      setMessages(prev => [...prev, farewellMessage]);
+      setMessages(finalMessages);
 
-      // Save the final conversation
       try {
+        // Final save to database
         await fetch('/api/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            messages: [...messages, farewellMessage],
+            messages: finalMessages,
             userId: storedUserId,
             cuddleId: selectedCuddle
           }),
         });
 
-        // Show streak modal after 5 seconds
+        // Clear the ongoing conversation from localStorage
+        localStorage.removeItem('ongoing_journal_conversation');
+
         setTimeout(() => {
           setShowStreakModal(true);
-        }, 5000);
+        }, 3000);
       } catch (error) {
         console.error('Error saving chat:', error);
       }
@@ -353,6 +437,69 @@ function JournalContent() {
       setIsTyping(false);
     }
   };
+
+  const handleContinue = async () => {
+    setIsWelcomeBack(false);
+    setShowInput(false);
+    setIsTyping(true);
+
+    const continueMessage = { 
+      role: 'user' as const, 
+      content: "I'd like to continue our conversation." 
+    };
+    setMessages(prev => [...prev, continueMessage]);
+
+    try {
+      const response = await fetch('/api/chat-completion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: continueMessage.content,
+          cuddleId: selectedCuddle,
+          messageHistory: messages
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const { response: aiResponse } = await response.json();
+      
+      const assistantMessage = { 
+        role: 'assistant' as const, 
+        content: aiResponse
+      };
+
+      setIsTyping(false);
+      setMessages(prev => [...prev, assistantMessage]);
+      setShowInput(true);
+    } catch (error) {
+      console.error('Error in handleContinue:', error);
+      setIsTyping(false);
+      setShowInput(true);
+    }
+  };
+
+  // Add this effect to update the name in the database when finishing entry
+  useEffect(() => {
+    if (showStreakModal && userId && anonymousName) {
+      fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
+          anonymousName
+        }),
+      }).catch(error => {
+        console.error('Error updating user name:', error);
+      });
+    }
+  }, [showStreakModal, userId, anonymousName]);
 
   return (
     <main className="min-h-screen bg-background flex flex-col">
@@ -452,37 +599,38 @@ function JournalContent() {
           </AnimatePresence>
 
           {/* Typing Indicator */}
-          {isTyping && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex justify-start gap-3"
-            >
-              {/* Icon container for typing indicator */} 
-              <div className="flex-shrink-0 w-10 flex justify-center items-start">
-                <Image
-                  src={getCuddleImage(selectedCuddle)}
-                  alt={getCuddleName(selectedCuddle)}
-                  width={40}
-                  height={40}
-                  className="h-10 w-10 rounded-full"
-                />
-              </div>
-              {/* Typing indicator content */}
-              <div className="flex flex-col max-w-[85%]">
-                <div className="bg-primary/10 p-4 rounded-2xl text-primary">
-                  <div className="flex space-x-2">
-                    <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce delay-100" />
-                    <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce delay-200" />
-                  </div>
+          <AnimatePresence>
+            {isTyping && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="flex justify-start gap-3"
+              >
+                <div className="flex-shrink-0 w-10 flex justify-center items-start">
+                  <Image
+                    src={getCuddleImage(selectedCuddle)}
+                    alt={getCuddleName(selectedCuddle)}
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 rounded-full"
+                  />
                 </div>
-                <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
-                  {getCuddleName(selectedCuddle)}
-                </span>
-              </div>
-            </motion.div>
-          )}
+                <div className="flex flex-col max-w-[85%] items-start">
+                  <div className="p-4 rounded-2xl bg-primary/10 text-primary">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                  <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
+                    {getCuddleName(selectedCuddle)} is typing...
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Add ref for auto-scrolling */}
           <div ref={messagesEndRef} />
@@ -491,31 +639,48 @@ function JournalContent() {
           {showInput && (
             <div className="flex justify-end">
               <div className="w-[80%]">
-                <form onSubmit={handleSubmit} className="space-y-2">
-                  <textarea
-                    value={userResponse}
-                    onChange={(e) => setUserResponse(e.target.value)}
-                    placeholder="Type your response..."
-                    rows={3}
-                    className="w-full p-4 rounded-2xl border-2 border-primary/20 focus:border-primary outline-none bg-white resize-none"
-                  />
+                {isWelcomeBack ? (
                   <div className="flex justify-end items-center gap-2">
                     <button
-                      type="button"
                       onClick={handleFinishEntry}
-                      className="text-primary/70 border-2 border-primary/20 px-2 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
+                      className="text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
                     >
                       Finish Entry
                     </button>
                     <button
-                      type="submit"
-                      disabled={!userResponse.trim()}
-                      className="bg-primary text-white px-6 py-2 rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                      onClick={handleContinue}
+                      className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors"
                     >
-                      Send
+                      Continue
                     </button>
                   </div>
-                </form>
+                ) : (
+                  <form onSubmit={handleSubmit} className="space-y-2">
+                    <textarea
+                      value={userResponse}
+                      onChange={(e) => setUserResponse(e.target.value)}
+                      placeholder="Type your response..."
+                      rows={3}
+                      className="w-full p-4 rounded-2xl border-2 border-primary/20 focus:border-primary outline-none bg-white resize-none"
+                    />
+                    <div className="flex justify-end items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleFinishEntry}
+                        className="text-primary/70 border-2 border-primary/20 px-2 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
+                      >
+                        Finish Entry
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!userResponse.trim()}
+                        className="bg-primary text-white px-6 py-2 rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           )}

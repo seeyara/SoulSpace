@@ -1,13 +1,79 @@
-.next
+# Dependencies
 node_modules
-.git
-.env.local
 npm-debug.log
 yarn-debug.log
 yarn-error.log
-.DS_Store
-README.md
+
+# Next.js build output
+.next
+out
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Version control
+.git
 .gitignore
-.vscode
+
+# IDE and editor files
 .idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+coverage
+.nyc_output
+jest.config.js
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local development files
+docker-compose*.yml
+README.md
+*.md
+LICENSE
+.editorconfig
+
+# Cache directories
+.npm
+.eslintcache
+.stylelintcache
+
+# Build artifacts
+dist
+build
+*.tsbuildinfo
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Misc
+.github
+docs
+
+# Misc
+.pnp
+.pnp.js
+
+# Misc
+*.pem
+.env*
+!.env.example
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Temp files
 *.log
+*.tmp 

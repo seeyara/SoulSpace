@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { Heart, MessageCircle, X } from 'lucide-react';
+import { LockClosedIcon } from '@heroicons/react/24/solid';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
@@ -94,7 +95,6 @@ export default function Community() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
 
-      // Update the UI with new like status
       const updatedReplies = selectedQuestion.replies.map(reply =>
         reply.id === replyId
           ? { ...reply, likes: data.likes, is_liked: data.is_liked }
@@ -138,14 +138,12 @@ export default function Community() {
 
       setNewReply('');
       
-      // Refresh replies
       const replies = await fetchReplies(selectedQuestion.id);
       setSelectedQuestion({
         ...selectedQuestion,
         replies
       });
 
-      // Refresh questions to update reply count
       fetchQuestions();
     } catch (error) {
       console.error('Error submitting reply:', error);
@@ -157,9 +155,18 @@ export default function Community() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative">
+      {/* Locked Overlay */}
+      <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+        <LockClosedIcon className="w-16 h-16 text-white mb-4" />
+        <h2 className="text-2xl font-semibold text-white mb-2">Coming Soon</h2>
+        <p className="text-gray-200 text-center max-w-sm px-4">
+          The community feature is currently under development. Check back soon!
+        </p>
+      </div>
+
       {/* Header */}
-      <header className="fixed top-0 w-full bg-background/80 backdrop-blur-sm z-50 p-4 border-b border-primary/10">
+      <header className="fixed top-0 w-full bg-background/80 backdrop-blur-sm z-40 p-4 border-b border-primary/10">
         <div className="max-w-3xl mx-auto">
           <Image
             src="/assets/Logo.png"
@@ -198,50 +205,53 @@ export default function Community() {
             <button
               key={tag}
               onClick={() => setActiveTag(activeTag === tag ? null : tag)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`px-3 py-1 rounded-full text-sm whitespace-nowrap ${
                 activeTag === tag
                   ? 'bg-primary text-white'
-                  : 'bg-primary/20 text-primary hover:bg-primary/20'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              #{tag}
+              {tag}
             </button>
           ))}
         </motion.div>
 
-        {/* Question Cards */}
-        <div className="space-y-4">
-          {questions
-            .filter(q => !activeTag || q.tags.includes(activeTag))
-            .map((question, index) => (
+        {/* Questions List */}
+        <AnimatePresence>
+          {questions.map((question, index) => (
+            (!activeTag || question.tags.includes(activeTag)) && (
               <motion.div
                 key={question.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
                 transition={{ delay: index * 0.1 }}
                 onClick={() => handleQuestionClick(question)}
-                className="bg-white rounded-2xl p-6 border-2 border-primary/10 hover:border-primary/20 transition-colors cursor-pointer"
+                className="bg-white rounded-lg p-4 mb-4 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
               >
-                <h2 className="text-xl font-medium text-gray-900 mb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
                   {question.question}
-                </h2>
-                
-                <div className="flex items-center justify-between">
+                </h3>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center text-gray-500">
+                    <MessageCircle className="w-4 h-4 mr-1" />
+                    {question.reply_count} replies
+                  </div>
                   <div className="flex gap-2">
                     {question.tags.map(tag => (
-                      <span key={tag} className="text-sm text-primary/60">
-                        #{tag}
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs"
+                      >
+                        {tag}
                       </span>
                     ))}
                   </div>
-                  <div className="flex items-center gap-1 text-primary/60">
-                    <MessageCircle className="w-5 h-5" />
-                    <span className="text-sm">{question.reply_count}</span>
-                  </div>
                 </div>
               </motion.div>
-            ))}
-        </div>
+            )
+          ))}
+        </AnimatePresence>
 
         {/* Replies Modal */}
         <AnimatePresence>

@@ -4,18 +4,7 @@ import "./globals.css";
 import BottomNav from '@/components/BottomNav';
 
 const harmoniaSans = localFont({
-  src: [
-    {
-      path: '../../public/assets/fonts/HarmoniaSans.woff2',
-      weight: '300',
-      style: 'normal',
-    },
-    {
-      path: '../../public/assets/fonts/HarmoniaSans.woff2',
-      weight: '600',
-      style: 'normal',
-    }
-  ],
+  src: '../../public/assets/fonts/HarmoniaSans.woff2',
   variable: '--font-harmonia-sans',
 });
 

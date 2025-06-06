@@ -228,9 +228,7 @@ export default function StreakModal({ isOpen, onClose, date, userId }: StreakMod
               transition={{ delay: 0.6 }}
             >
               <p className="text-gray-600 mb-6">
-                You're doing amazing! 🌟 Want us to give you a gentle nudge to keep your journaling streak going? 
-                Let's make sure you never miss a cozy chat with your Cuddle™!
-              </p>
+                Want a little nudge so you never miss your next chat with Cuddle™?</p>
               
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div>
@@ -246,13 +244,22 @@ export default function StreakModal({ isOpen, onClose, date, userId }: StreakMod
                     <p className="text-red-500 text-sm mt-2">{error}</p>
                   )}
                 </div>
+                <div className="flex gap-4 justify-center items-center">
                 <button
-                  type="submit"
-                  disabled={isLoading || !email}
-                  className="bg-primary text-white px-8 py-3 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors w-full"
-                >
-                  {isLoading ? 'Saving...' : 'Keep My Streak Going! ✨'}
-                </button>
+                    onClick={onClose}
+                    className="px-6 py-3 rounded-xl font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    Skip
+                  </button>
+                   <button
+                    type="submit"
+                    disabled={isLoading || !email}
+                    className="bg-primary text-white px-6 py-3 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                  >
+                    {isLoading ? 'Saving...' : 'Keep My Streak ✨'}
+                  </button>
+                 
+                </div>
               </form>
             </motion.div>
           ) : (
@@ -262,20 +269,19 @@ export default function StreakModal({ isOpen, onClose, date, userId }: StreakMod
               className="text-center"
             >
               <p className="text-green-600 font-medium text-lg">
-                Amazing! We'll send you gentle reminders to keep your journaling magic going! ✨
+                Amazing! We'll send you gentle reminders! ✨
               </p>
+              <motion.button
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.8 }}
+                onClick={onClose}
+                className="mt-4 px-6 py-2 rounded-xl font-medium text-primary hover:bg-primary/10 transition-colors"
+              >
+                See you tomorrow! 🌙
+              </motion.button>
             </motion.div>
           )}
-          
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.8 }}
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 transition-colors text-sm"
-          >
-            {isSignedUp ? 'See you tomorrow! 🌙' : 'Maybe later'}
-          </motion.button>
         </div>
       </motion.div>
     </motion.div>
