@@ -1,0 +1,706 @@
+'use client';
+
+import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Image from 'next/image';
+import { supabase } from '@/lib/supabase';
+import { cuddleData } from '@/data/cuddles';
+import type { CuddleId } from '@/types/cuddles';
+import StreakModal from '@/components/StreakModal';
+import { useRouter } from 'next/navigation';
+import { format } from 'date-fns';
+import { generateAnonymousName } from '@/lib/utils/nameGenerator';
+
+const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue our conversation or finish this entry?";
+
+function JournalContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const selectedCuddle = (searchParams.get('cuddle') || 'ellie-sr') as CuddleId;
+  const [currentPrompt, setCurrentPrompt] = useState<string>('');
+  const [isTyping, setIsTyping] = useState(true);
+  const [userResponse, setUserResponse] = useState('');
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [userId, setUserId] = useState<string>('');
+  const [showInput, setShowInput] = useState(false);
+  const [showStreakModal, setShowStreakModal] = useState(false);
+  const [usedPrompts, setUsedPrompts] = useState<string[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isWelcomeBack, setIsWelcomeBack] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [anonymousName, setAnonymousName] = useState<string>('');
+
+  // Initialize user and start intro message
+  useEffect(() => {
+    const initializeUser = async () => {
+      try {
+        const storedUserId = localStorage.getItem('soul_journal_user_id');
+        const storedName = localStorage.getItem('soul_journal_anonymous_name');
+        
+        if (storedUserId) {
+          console.log('Using stored user ID:', storedUserId);
+          setUserId(storedUserId);
+          
+          if (storedName) {
+            setAnonymousName(storedName);
+            // Ensure name is in database
+            try {
+              await fetch('/api/users', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  userId: storedUserId,
+                  name: storedName
+                }),
+              });
+            } catch (error) {
+              console.error('Error syncing name to database:', error);
+            }
+          } else {
+            // Generate new name if none exists
+            const generatedName = generateAnonymousName();
+            try {
+              const response = await fetch('/api/users', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  userId: storedUserId,
+                  name: generatedName
+                }),
+              });
+              
+              if (response.ok) {
+                setAnonymousName(generatedName);
+                localStorage.setItem('soul_journal_anonymous_name', generatedName);
+              }
+            } catch (error) {
+              console.error('Error saving new name:', error);
+            }
+          }
+          return;
+        }
+
+        // Create new user with generated name
+        const generatedName = generateAnonymousName();
+        const tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        
+        try {
+          const { data: newUser, error: createError } = await supabase
+            .from('users')
+            .insert({
+              temp_session_id: tempSessionId,
+              name: generatedName
+            })
+            .select('id')
+            .single();
+
+          if (createError) {
+            console.error('Error creating user:', createError);
+            return;
+          }
+
+          if (newUser) {
+            const newUserId = newUser.id;
+            console.log('Created new user:', newUserId);
+            localStorage.setItem('soul_journal_user_id', newUserId);
+            localStorage.setItem('soul_journal_anonymous_name', generatedName);
+            setUserId(newUserId);
+            setAnonymousName(generatedName);
+          }
+        } catch (error) {
+          console.error('Error in user creation:', error);
+        }
+      } catch (error) {
+        console.error('Error in initializeUser:', error);
+      }
+    };
+
+    initializeUser();
+  }, []);
+
+  // Group consecutive assistant messages
+  const groupedMessages = messages.reduce((acc, message, index) => {
+    if (message.role === 'assistant' && 
+        index > 0 && 
+        acc.length > 0 && 
+        acc[acc.length - 1].role === 'assistant') {
+      acc[acc.length - 1].content += '\n\n' + message.content;
+    } else {
+      acc.push({ ...message });
+    }
+    return acc;
+  }, [] as typeof messages);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    if (messages.length > 10) {
+      scrollToBottom();
+    }
+    setIsInitialLoad(false);
+  }, [messages, isInitialLoad]);
+
+  useEffect(() => {
+    const fetchChatHistory = async () => {
+      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      if (!storedUserId) {
+        // Initialize new conversation if no user ID
+        const cuddle = cuddleData.cuddles[selectedCuddle];
+        setIsTyping(true);
+        setTimeout(() => {
+          setMessages([{ 
+            role: 'assistant', 
+            content: cuddle.intro
+          }, { 
+            role: 'assistant', 
+            content: cuddle.prompts[0]
+          }]);
+          setIsTyping(false);
+          setShowInput(true);
+        }, 1000);
+        return;
+      }
+
+      const today = format(new Date(), 'yyyy-MM-dd');
+      
+      try {
+        const response = await fetch(`/api/chat?userId=${storedUserId}&date=${today}`);
+        const { data } = await response.json();
+        
+        if (data?.messages && data.messages.length > 0) {
+          // Check if the last message is already the welcome back message
+          const hasWelcomeBack = data.messages.some((msg: { role: 'user' | 'assistant'; content: string }) => 
+            msg.role === 'assistant' && 
+            msg.content === WELCOME_BACK_MESSAGE
+          );
+
+          setMessages(data.messages);
+          
+          if (!hasWelcomeBack) {
+            // Add continuation message after loading chat history
+            setTimeout(() => {
+              setIsTyping(true);
+              setTimeout(() => {
+                setMessages(prev => [...prev, {
+                  role: 'assistant',
+                  content: WELCOME_BACK_MESSAGE
+                }]);
+                setIsTyping(false);
+                setIsWelcomeBack(true);
+                setShowInput(true);
+              }, 1500);
+            }, 1000);
+          } else {
+            setIsWelcomeBack(true);
+            setShowInput(true);
+          }
+        } else {
+          // Start a new conversation if no chat history
+          const cuddle = cuddleData.cuddles[selectedCuddle];
+          setIsTyping(true);
+          setTimeout(() => {
+            setMessages([{ 
+              role: 'assistant', 
+              content: cuddle.intro
+            }, { 
+              role: 'assistant', 
+              content: cuddle.prompts[0]
+            }]);
+            setIsTyping(false);
+            setShowInput(true);
+          }, 1000);
+        }
+      } catch (error) {
+        console.error('Error fetching chat history:', error);
+        // Start a new conversation on error
+        const cuddle = cuddleData.cuddles[selectedCuddle];
+        setIsTyping(true);
+        setTimeout(() => {
+          setMessages([{ 
+            role: 'assistant', 
+            content: cuddle.intro
+          }, { 
+            role: 'assistant', 
+            content: cuddle.prompts[0]
+          }]);
+          setIsTyping(false);
+          setShowInput(true);
+        }, 1000);
+      }
+    };
+
+    fetchChatHistory();
+  }, [selectedCuddle]);
+
+  useEffect(() => {
+    // Load ongoing conversation from localStorage if exists
+    const ongoingConversation = localStorage.getItem('ongoing_journal_conversation');
+    if (ongoingConversation) {
+      const { messages: savedMessages, cuddle } = JSON.parse(ongoingConversation);
+      if (cuddle === selectedCuddle) {
+        setMessages(savedMessages);
+        setShowInput(true);
+      }
+    }
+  }, [selectedCuddle]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userResponse.trim()) return;
+
+    const storedUserId = localStorage.getItem('soul_journal_user_id');
+    if (!storedUserId) {
+      console.error('No user ID available');
+      router.push('/');
+      return;
+    }
+
+    const userMessage = { role: 'user' as const, content: userResponse.trim() };
+    setMessages(prev => [...prev, userMessage]);
+    setUserResponse('');
+    setShowInput(false);
+    setIsTyping(true);
+
+    try {
+      const response = await fetch('/api/chat-completion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage.content,
+          cuddleId: selectedCuddle,
+          messageHistory: messages
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const { response: aiResponse, shouldEnd } = await response.json();
+      
+      const assistantMessage = { 
+        role: 'assistant' as const, 
+        content: aiResponse
+      };
+
+      const updatedMessages = [...messages, userMessage, assistantMessage];
+      setIsTyping(false);
+      setMessages(updatedMessages);
+
+      // Save to localStorage instead of database
+      localStorage.setItem('ongoing_journal_conversation', JSON.stringify({
+        messages: updatedMessages,
+        cuddle: selectedCuddle
+      }));
+
+      if (shouldEnd) {
+        setTimeout(() => {
+          setShowStreakModal(true);
+        }, 3000);
+        return;
+      }
+
+      setShowInput(true);
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
+      setIsTyping(false);
+      setShowInput(true);
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: "I'm having trouble responding right now. Could you try again?" 
+      }]);
+    }
+  };
+
+  const handleStartJournaling = () => {
+    setShowInput(false);
+    
+    // Filter out used prompts
+    const availablePrompts = cuddleData.cuddles[selectedCuddle].prompts.filter(p => !usedPrompts.includes(p));
+    let selectedPrompt;
+    
+    if (availablePrompts.length === 0) {
+      // If all prompts are used, reset the used prompts
+      setUsedPrompts([]);
+      selectedPrompt = availablePrompts[Math.floor(Math.random() * availablePrompts.length)];
+    } else {
+      selectedPrompt = availablePrompts[Math.floor(Math.random() * availablePrompts.length)];
+    }
+
+    setCurrentPrompt(selectedPrompt);
+    setUsedPrompts(prev => [...prev, selectedPrompt]);
+
+    setIsTyping(true);
+    setTimeout(() => {
+      setIsTyping(false);
+      setMessages(prev => [...prev, { role: 'assistant', content: selectedPrompt }]);
+      setShowInput(true);
+    }, 2000);
+  };
+
+  const handleCloseStreakModal = () => {
+    setShowStreakModal(false);
+    router.push('/account');
+  };
+
+  const getCuddleName = (id: string) => {
+    return id.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  };
+
+  const getCuddleImage = (id: string) => {
+    switch(id) {
+      case 'olly-sr':
+        return '/assets/Olly Sr.png';
+      case 'olly-jr':
+        return '/assets/Olly Jr.png';
+      case 'ellie-jr':
+        return '/assets/Ellie Jr.png';
+      default:
+        return '/assets/Ellie Sr.png';
+    }
+  };
+
+  const handleFinishEntry = async () => {
+    const storedUserId = localStorage.getItem('soul_journal_user_id');
+    if (!storedUserId) {
+      console.error('No user ID available');
+      router.push('/');
+      return;
+    }
+
+    setShowInput(false);
+    setIsTyping(true);
+
+    try {
+      const response = await fetch('/api/chat-completion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: "_finish_entry_",
+          cuddleId: selectedCuddle,
+          messageHistory: messages,
+          forceEnd: true
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const { response: aiResponse } = await response.json();
+      
+      const farewellMessage = { 
+        role: 'assistant' as const, 
+        content: aiResponse
+      };
+
+      const finalMessages = [...messages, farewellMessage];
+      setIsTyping(false);
+      setMessages(finalMessages);
+
+      try {
+        // Final save to database
+        await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messages: finalMessages,
+            userId: storedUserId,
+            cuddleId: selectedCuddle
+          }),
+        });
+
+        // Clear the ongoing conversation from localStorage
+        localStorage.removeItem('ongoing_journal_conversation');
+
+        setTimeout(() => {
+          setShowStreakModal(true);
+        }, 3000);
+      } catch (error) {
+        console.error('Error saving chat:', error);
+      }
+    } catch (error) {
+      console.error('Error in handleFinishEntry:', error);
+      setIsTyping(false);
+    }
+  };
+
+  const handleContinue = async () => {
+    setIsWelcomeBack(false);
+    setShowInput(false);
+    setIsTyping(true);
+
+    const continueMessage = { 
+      role: 'user' as const, 
+      content: "I'd like to continue our conversation." 
+    };
+    setMessages(prev => [...prev, continueMessage]);
+
+    try {
+      const response = await fetch('/api/chat-completion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: continueMessage.content,
+          cuddleId: selectedCuddle,
+          messageHistory: messages
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const { response: aiResponse } = await response.json();
+      
+      const assistantMessage = { 
+        role: 'assistant' as const, 
+        content: aiResponse
+      };
+
+      setIsTyping(false);
+      setMessages(prev => [...prev, assistantMessage]);
+      setShowInput(true);
+    } catch (error) {
+      console.error('Error in handleContinue:', error);
+      setIsTyping(false);
+      setShowInput(true);
+    }
+  };
+
+  // Add this effect to update the name in the database when finishing entry
+  useEffect(() => {
+    if (showStreakModal && userId && anonymousName) {
+      fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
+          anonymousName
+        }),
+      }).catch(error => {
+        console.error('Error updating user name:', error);
+      });
+    }
+  }, [showStreakModal, userId, anonymousName]);
+
+  return (
+    <main className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <header className="fixed top-0 w-full bg-background/80 backdrop-blur-sm z-50 p-4 border-b border-primary/10">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
+          <Image
+            src="/assets/Logo.png"
+            alt="Soul Logo"
+            width={100}
+            height={32}
+            className="h-8 w-auto cursor-pointer"
+            onClick={() => router.push('/')}
+          />
+          <div className="flex items-center gap-2">
+            <Image
+              src={getCuddleImage(selectedCuddle)}
+              alt={getCuddleName(selectedCuddle)}
+              width={32}
+              height={32}
+              className="h-8 w-8 rounded-full"
+            />
+            <span className="text-primary font-medium">
+              {getCuddleName(selectedCuddle)}
+            </span>
+          </div>
+        </div>
+      </header>
+
+      {/* Chat Area */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto space-y-4 px-4 pt-20 pb-24">
+          <AnimatePresence>
+            {messages.map((message, index) => {
+              const isLastAssistantMessage = message.role === 'assistant' && 
+                (index === messages.length - 1 || messages[index + 1]?.role === 'user');
+              const isFirstAssistantMessage = message.role === 'assistant' && 
+                (index === 0 || messages[index - 1]?.role === 'user');
+
+              if (message.role === 'user') {
+                return (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="flex justify-end"
+                  >
+                     <div className="flex flex-col max-w-[85%] items-end">
+                       <div
+                         className="p-4 rounded-2xl bg-primary text-white"
+                       >
+                         {message.content}
+                       </div>
+                     </div>
+                  </motion.div>
+                );
+              } else { // Assistant message
+                return (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className="flex justify-start gap-3"
+                  >
+                    {/* Icon column */}
+                    <div className="flex-shrink-0 w-10 flex justify-center items-start">
+                      {isFirstAssistantMessage && (
+                        <Image
+                          src={getCuddleImage(selectedCuddle)}
+                          alt={getCuddleName(selectedCuddle)}
+                          width={40}
+                          height={40}
+                          className="h-10 w-10 rounded-full"
+                        />
+                      )}
+                    </div>
+                    
+                    {/* Message content and name column */}
+                    <div className="flex flex-col max-w-[85%] items-start">
+                      <div
+                        className="p-4 rounded-2xl bg-primary/10 text-primary"
+                      >
+                        {message.content}
+                      </div>
+                      {isLastAssistantMessage && (
+                        <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
+                          {getCuddleName(selectedCuddle)} 💭
+                        </span>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              }
+            })}
+          </AnimatePresence>
+
+          {/* Typing Indicator */}
+          <AnimatePresence>
+            {isTyping && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="flex justify-start gap-3"
+              >
+                <div className="flex-shrink-0 w-10 flex justify-center items-start">
+                  <Image
+                    src={getCuddleImage(selectedCuddle)}
+                    alt={getCuddleName(selectedCuddle)}
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 rounded-full"
+                  />
+                </div>
+                <div className="flex flex-col max-w-[85%] items-start">
+                  <div className="p-4 rounded-2xl bg-primary/10 text-primary">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                  <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
+                    {getCuddleName(selectedCuddle)} is typing...
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Add ref for auto-scrolling */}
+          <div ref={messagesEndRef} />
+
+          {/* User Response Input */}
+          {showInput && (
+            <div className="flex justify-end">
+              <div className="w-[80%]">
+                {isWelcomeBack ? (
+                  <div className="flex justify-end items-center gap-2">
+                    <button
+                      onClick={handleFinishEntry}
+                      className="text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
+                    >
+                      Finish Entry
+                    </button>
+                    <button
+                      onClick={handleContinue}
+                      className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors"
+                    >
+                      Continue
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSubmit} className="space-y-2">
+                    <textarea
+                      value={userResponse}
+                      onChange={(e) => setUserResponse(e.target.value)}
+                      placeholder="Type your response..."
+                      rows={3}
+                      className="w-full p-4 rounded-2xl border-2 border-primary/20 focus:border-primary outline-none bg-white resize-none"
+                    />
+                    <div className="flex justify-end items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleFinishEntry}
+                        className="text-primary/70 border-2 border-primary/20 px-2 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
+                      >
+                        Finish Entry
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!userResponse.trim()}
+                        className="bg-primary text-white px-6 py-2 rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <StreakModal
+        isOpen={showStreakModal}
+        onClose={handleCloseStreakModal}
+        date={format(new Date(), 'MMMM d, yyyy')}
+        userId={userId}
+      />
+    </main>
+  );
+}
+
+export default function JournalPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <JournalContent />
+    </Suspense>
+  );
+} 
