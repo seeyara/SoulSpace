@@ -9,6 +9,13 @@ const nextConfig = {
   // Enable static optimization
   experimental: {
     optimizeCss: true,
+    // Configure critters for CSS optimization
+    critters: {
+      ssrMode: true,
+      preload: 'media',
+      noscriptFallback: true,
+      pruneSource: true,
+    },
   },
   // Configure headers for security
   async headers() {
@@ -35,6 +42,29 @@ const nextConfig = {
         ],
       },
     ];
+  },
+  // Ensure proper handling of CSS modules
+  webpack: (config, { dev, isServer }) => {
+    // Optimize CSS only in production
+    if (!dev && !isServer) {
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          ...config.optimization.splitChunks,
+          // Ensure CSS is properly chunked
+          cacheGroups: {
+            ...config.optimization.splitChunks.cacheGroups,
+            styles: {
+              name: 'styles',
+              test: /\.(css|scss)$/,
+              chunks: 'all',
+              enforce: true,
+            },
+          },
+        },
+      };
+    }
+    return config;
   },
 }
 
