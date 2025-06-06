@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { config } from '@/lib/config';
+// import { config } from '@/lib/config';
 import { cuddleData } from '@/data/cuddles';
 import type { CuddleId } from '@/types/cuddles';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const openai = new OpenAI({
-  apiKey: config.openai.apiKey,
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 const CUDDLE_TRAITS = {
@@ -106,6 +109,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Error in chat completion:', error);
+    console.log("ERROR", error)
     return NextResponse.json(
       { error: 'Failed to generate response' },
       { status: 500 }

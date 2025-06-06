@@ -11,7 +11,7 @@ import StreakModal from '@/components/StreakModal';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { generateAnonymousName } from '@/lib/utils/nameGenerator';
-
+import axios from 'axios';
 const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue our conversation or finish this entry?";
 
 function JournalContent() {
@@ -37,11 +37,11 @@ function JournalContent() {
       try {
         const storedUserId = localStorage.getItem('soul_journal_user_id');
         const storedName = localStorage.getItem('soul_journal_anonymous_name');
-        
+
         if (storedUserId) {
           console.log('Using stored user ID:', storedUserId);
           setUserId(storedUserId);
-          
+
           if (storedName) {
             setAnonymousName(storedName);
             // Ensure name is in database
@@ -73,7 +73,7 @@ function JournalContent() {
                   name: generatedName
                 }),
               });
-              
+
               if (response.ok) {
                 setAnonymousName(generatedName);
                 localStorage.setItem('soul_journal_anonymous_name', generatedName);
@@ -88,7 +88,7 @@ function JournalContent() {
         // Create new user with generated name
         const generatedName = generateAnonymousName();
         const tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        
+
         try {
           const { data: newUser, error: createError } = await supabase
             .from('users')
@@ -125,10 +125,10 @@ function JournalContent() {
 
   // Group consecutive assistant messages
   const groupedMessages = messages.reduce((acc, message, index) => {
-    if (message.role === 'assistant' && 
-        index > 0 && 
-        acc.length > 0 && 
-        acc[acc.length - 1].role === 'assistant') {
+    if (message.role === 'assistant' &&
+      index > 0 &&
+      acc.length > 0 &&
+      acc[acc.length - 1].role === 'assistant') {
       acc[acc.length - 1].content += '\n\n' + message.content;
     } else {
       acc.push({ ...message });
@@ -155,11 +155,11 @@ function JournalContent() {
         const cuddle = cuddleData.cuddles[selectedCuddle];
         setIsTyping(true);
         setTimeout(() => {
-          setMessages([{ 
-            role: 'assistant', 
+          setMessages([{
+            role: 'assistant',
             content: cuddle.intro
-          }, { 
-            role: 'assistant', 
+          }, {
+            role: 'assistant',
             content: cuddle.prompts[0]
           }]);
           setIsTyping(false);
@@ -169,20 +169,20 @@ function JournalContent() {
       }
 
       const today = format(new Date(), 'yyyy-MM-dd');
-      
+
       try {
         const response = await fetch(`/api/chat?userId=${storedUserId}&date=${today}`);
         const { data } = await response.json();
-        
+
         if (data?.messages && data.messages.length > 0) {
           // Check if the last message is already the welcome back message
-          const hasWelcomeBack = data.messages.some((msg: { role: 'user' | 'assistant'; content: string }) => 
-            msg.role === 'assistant' && 
+          const hasWelcomeBack = data.messages.some((msg: { role: 'user' | 'assistant'; content: string }) =>
+            msg.role === 'assistant' &&
             msg.content === WELCOME_BACK_MESSAGE
           );
 
           setMessages(data.messages);
-          
+
           if (!hasWelcomeBack) {
             // Add continuation message after loading chat history
             setTimeout(() => {
@@ -206,11 +206,11 @@ function JournalContent() {
           const cuddle = cuddleData.cuddles[selectedCuddle];
           setIsTyping(true);
           setTimeout(() => {
-            setMessages([{ 
-              role: 'assistant', 
+            setMessages([{
+              role: 'assistant',
               content: cuddle.intro
-            }, { 
-              role: 'assistant', 
+            }, {
+              role: 'assistant',
               content: cuddle.prompts[0]
             }]);
             setIsTyping(false);
@@ -223,11 +223,11 @@ function JournalContent() {
         const cuddle = cuddleData.cuddles[selectedCuddle];
         setIsTyping(true);
         setTimeout(() => {
-          setMessages([{ 
-            role: 'assistant', 
+          setMessages([{
+            role: 'assistant',
             content: cuddle.intro
-          }, { 
-            role: 'assistant', 
+          }, {
+            role: 'assistant',
             content: cuddle.prompts[0]
           }]);
           setIsTyping(false);
@@ -269,26 +269,43 @@ function JournalContent() {
     setIsTyping(true);
 
     try {
-      const response = await fetch('/api/chat-completion', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      let response;
+      try {
+         response = await axios.post('/api/chat-completion', {
           message: userMessage.content,
           cuddleId: selectedCuddle,
           messageHistory: messages
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get AI response');
+         },{
+          headers: {
+            'Content-Type': 'application/json',
+          },
+         })
+        //   {
+        //   method: 'POST',
+        //   headers: {
+        //     'Content-Type': 'application/json',
+        //   },
+        //   body: JSON.stringify({
+        //     message: userMessage.content,
+        //     cuddleId: selectedCuddle,
+        //     messageHistory: messages
+        //   }),
+        // }
+      
+      } catch (error) {
+        console.error('Error:', error);
       }
 
-      const { response: aiResponse, shouldEnd } = await response.json();
-      
-      const assistantMessage = { 
-        role: 'assistant' as const, 
+      console.log("response", response)
+
+      if (!response) {
+        throw new Error('Failed to get AI response or response is null');
+      }
+
+      const { response: aiResponse, shouldEnd } = response.data;
+
+      const assistantMessage = {
+        role: 'assistant' as const,
         content: aiResponse
       };
 
@@ -314,20 +331,20 @@ function JournalContent() {
       console.error('Error in handleSubmit:', error);
       setIsTyping(false);
       setShowInput(true);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: "I'm having trouble responding right now. Could you try again?" 
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: "I'm having trouble responding right now. Could you try again?"
       }]);
     }
   };
 
   const handleStartJournaling = () => {
     setShowInput(false);
-    
+
     // Filter out used prompts
     const availablePrompts = cuddleData.cuddles[selectedCuddle].prompts.filter(p => !usedPrompts.includes(p));
     let selectedPrompt;
-    
+
     if (availablePrompts.length === 0) {
       // If all prompts are used, reset the used prompts
       setUsedPrompts([]);
@@ -357,7 +374,7 @@ function JournalContent() {
   };
 
   const getCuddleImage = (id: string) => {
-    switch(id) {
+    switch (id) {
       case 'olly-sr':
         return '/assets/Olly Sr.png';
       case 'olly-jr':
@@ -399,9 +416,9 @@ function JournalContent() {
       }
 
       const { response: aiResponse } = await response.json();
-      
-      const farewellMessage = { 
-        role: 'assistant' as const, 
+
+      const farewellMessage = {
+        role: 'assistant' as const,
         content: aiResponse
       };
 
@@ -443,9 +460,9 @@ function JournalContent() {
     setShowInput(false);
     setIsTyping(true);
 
-    const continueMessage = { 
-      role: 'user' as const, 
-      content: "I'd like to continue our conversation." 
+    const continueMessage = {
+      role: 'user' as const,
+      content: "I'd like to continue our conversation."
     };
     setMessages(prev => [...prev, continueMessage]);
 
@@ -467,9 +484,9 @@ function JournalContent() {
       }
 
       const { response: aiResponse } = await response.json();
-      
-      const assistantMessage = { 
-        role: 'assistant' as const, 
+
+      const assistantMessage = {
+        role: 'assistant' as const,
         content: aiResponse
       };
 
@@ -534,9 +551,9 @@ function JournalContent() {
         <div className="max-w-3xl mx-auto space-y-4 px-4 pt-20 pb-24">
           <AnimatePresence>
             {messages.map((message, index) => {
-              const isLastAssistantMessage = message.role === 'assistant' && 
+              const isLastAssistantMessage = message.role === 'assistant' &&
                 (index === messages.length - 1 || messages[index + 1]?.role === 'user');
-              const isFirstAssistantMessage = message.role === 'assistant' && 
+              const isFirstAssistantMessage = message.role === 'assistant' &&
                 (index === 0 || messages[index - 1]?.role === 'user');
 
               if (message.role === 'user') {
@@ -548,13 +565,13 @@ function JournalContent() {
                     exit={{ opacity: 0, y: -20 }}
                     className="flex justify-end"
                   >
-                     <div className="flex flex-col max-w-[85%] items-end">
-                       <div
-                         className="p-4 rounded-2xl bg-primary text-white"
-                       >
-                         {message.content}
-                       </div>
-                     </div>
+                    <div className="flex flex-col max-w-[85%] items-end">
+                      <div
+                        className="p-4 rounded-2xl bg-primary text-white"
+                      >
+                        {message.content}
+                      </div>
+                    </div>
                   </motion.div>
                 );
               } else { // Assistant message
@@ -578,7 +595,7 @@ function JournalContent() {
                         />
                       )}
                     </div>
-                    
+
                     {/* Message content and name column */}
                     <div className="flex flex-col max-w-[85%] items-start">
                       <div
