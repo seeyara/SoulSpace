@@ -10,6 +10,9 @@ import type { CuddleId } from '@/types/cuddles';
 import StreakModal from '@/components/StreakModal';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
+import { generateAnonymousName } from '@/lib/utils/nameGenerator';
+
+const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue our conversation or finish this entry?";
 
 function JournalContent() {
   const searchParams = useSearchParams();
@@ -26,40 +29,91 @@ function JournalContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isWelcomeBack, setIsWelcomeBack] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [anonymousName, setAnonymousName] = useState<string>('');
 
   // Initialize user and start intro message
   useEffect(() => {
     const initializeUser = async () => {
       try {
         const storedUserId = localStorage.getItem('soul_journal_user_id');
+        const storedName = localStorage.getItem('soul_journal_anonymous_name');
         
         if (storedUserId) {
           console.log('Using stored user ID:', storedUserId);
           setUserId(storedUserId);
+          
+          if (storedName) {
+            setAnonymousName(storedName);
+            // Ensure name is in database
+            try {
+              await fetch('/api/users', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  userId: storedUserId,
+                  name: storedName
+                }),
+              });
+            } catch (error) {
+              console.error('Error syncing name to database:', error);
+            }
+          } else {
+            // Generate new name if none exists
+            const generatedName = generateAnonymousName();
+            try {
+              const response = await fetch('/api/users', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  userId: storedUserId,
+                  name: generatedName
+                }),
+              });
+              
+              if (response.ok) {
+                setAnonymousName(generatedName);
+                localStorage.setItem('soul_journal_anonymous_name', generatedName);
+              }
+            } catch (error) {
+              console.error('Error saving new name:', error);
+            }
+          }
           return;
         }
 
+        // Create new user with generated name
+        const generatedName = generateAnonymousName();
         const tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        console.log('Generated temp session ID:', tempSessionId);
+        
+        try {
+          const { data: newUser, error: createError } = await supabase
+            .from('users')
+            .insert({
+              temp_session_id: tempSessionId,
+              name: generatedName
+            })
+            .select('id')
+            .single();
 
-        const { data: newUser, error: createError } = await supabase
-          .from('users')
-          .insert({
-            temp_session_id: tempSessionId
-          })
-          .select('id')
-          .single();
+          if (createError) {
+            console.error('Error creating user:', createError);
+            return;
+          }
 
-        if (createError) {
-          console.error('Error creating user:', createError);
-          return;
-        }
-
-        if (newUser) {
-          const newUserId = newUser.id;
-          console.log('Created new user:', newUserId);
-          localStorage.setItem('soul_journal_user_id', newUserId);
-          setUserId(newUserId);
+          if (newUser) {
+            const newUserId = newUser.id;
+            console.log('Created new user:', newUserId);
+            localStorage.setItem('soul_journal_user_id', newUserId);
+            localStorage.setItem('soul_journal_anonymous_name', generatedName);
+            setUserId(newUserId);
+            setAnonymousName(generatedName);
+          }
+        } catch (error) {
+          console.error('Error in user creation:', error);
         }
       } catch (error) {
         console.error('Error in initializeUser:', error);
@@ -124,7 +178,7 @@ function JournalContent() {
           // Check if the last message is already the welcome back message
           const hasWelcomeBack = data.messages.some((msg: { role: 'user' | 'assistant'; content: string }) => 
             msg.role === 'assistant' && 
-            msg.content === "Welcome back! Would you like to continue our conversation or finish this entry?"
+            msg.content === WELCOME_BACK_MESSAGE
           );
 
           setMessages(data.messages);
@@ -136,7 +190,7 @@ function JournalContent() {
               setTimeout(() => {
                 setMessages(prev => [...prev, {
                   role: 'assistant',
-                  content: "Welcome back! Would you like to continue our conversation or finish this entry?"
+                  content: WELCOME_BACK_MESSAGE
                 }]);
                 setIsTyping(false);
                 setIsWelcomeBack(true);
@@ -185,11 +239,22 @@ function JournalContent() {
     fetchChatHistory();
   }, [selectedCuddle]);
 
+  useEffect(() => {
+    // Load ongoing conversation from localStorage if exists
+    const ongoingConversation = localStorage.getItem('ongoing_journal_conversation');
+    if (ongoingConversation) {
+      const { messages: savedMessages, cuddle } = JSON.parse(ongoingConversation);
+      if (cuddle === selectedCuddle) {
+        setMessages(savedMessages);
+        setShowInput(true);
+      }
+    }
+  }, [selectedCuddle]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userResponse.trim()) return;
 
-    // Get stored user ID
     const storedUserId = localStorage.getItem('soul_journal_user_id');
     if (!storedUserId) {
       console.error('No user ID available');
@@ -204,7 +269,6 @@ function JournalContent() {
     setIsTyping(true);
 
     try {
-      // Get AI response
       const response = await fetch('/api/chat-completion', {
         method: 'POST',
         headers: {
@@ -228,38 +292,24 @@ function JournalContent() {
         content: aiResponse
       };
 
+      const updatedMessages = [...messages, userMessage, assistantMessage];
       setIsTyping(false);
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages(updatedMessages);
 
-      // Save the conversation
-      try {
-        await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messages: [...messages, userMessage, assistantMessage],
-            userId: storedUserId,
-            cuddleId: selectedCuddle
-          }),
-        });
-      } catch (error) {
-        console.error('Error saving chat:', error);
-      }
+      // Save to localStorage instead of database
+      localStorage.setItem('ongoing_journal_conversation', JSON.stringify({
+        messages: updatedMessages,
+        cuddle: selectedCuddle
+      }));
 
-      // Handle conversation ending
       if (shouldEnd) {
-        // Show streak modal after 3 seconds
         setTimeout(() => {
           setShowStreakModal(true);
         }, 3000);
         return;
       }
 
-      // Always show input after AI response unless conversation ended
       setShowInput(true);
-
     } catch (error) {
       console.error('Error in handleSubmit:', error);
       setIsTyping(false);
@@ -331,7 +381,6 @@ function JournalContent() {
     setIsTyping(true);
 
     try {
-      // Get final AI response
       const response = await fetch('/api/chat-completion', {
         method: 'POST',
         headers: {
@@ -356,24 +405,27 @@ function JournalContent() {
         content: aiResponse
       };
 
+      const finalMessages = [...messages, farewellMessage];
       setIsTyping(false);
-      setMessages(prev => [...prev, farewellMessage]);
+      setMessages(finalMessages);
 
-      // Save the final conversation
       try {
+        // Final save to database
         await fetch('/api/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            messages: [...messages, farewellMessage],
+            messages: finalMessages,
             userId: storedUserId,
             cuddleId: selectedCuddle
           }),
         });
 
-        // Show streak modal after 5 seconds
+        // Clear the ongoing conversation from localStorage
+        localStorage.removeItem('ongoing_journal_conversation');
+
         setTimeout(() => {
           setShowStreakModal(true);
         }, 3000);
@@ -430,6 +482,24 @@ function JournalContent() {
       setShowInput(true);
     }
   };
+
+  // Add this effect to update the name in the database when finishing entry
+  useEffect(() => {
+    if (showStreakModal && userId && anonymousName) {
+      fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
+          anonymousName
+        }),
+      }).catch(error => {
+        console.error('Error updating user name:', error);
+      });
+    }
+  }, [showStreakModal, userId, anonymousName]);
 
   return (
     <main className="min-h-screen bg-background flex flex-col">

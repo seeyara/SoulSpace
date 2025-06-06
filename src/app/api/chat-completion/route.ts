@@ -32,12 +32,13 @@ const createPrompt = (cuddleId: CuddleId, exchange: number) => {
 ${stage}
 
 RULES:
-- 2-3 sentences max
-- If they show clear insight/understanding, offer to wrap up meaningfully
-- Reference physical Cuddle for comfort
-- Max 10 exchanges, but end it wherever it feels natural
+- 2–3 sentences replies. End each with a reflective question that encourages deeper thought and leans toward a positive reframe, like in CBT.
+- If the user shows clear insight, guide the conversation to a gentle close.
+- Reference the physical Cuddle™ as a source of comfort.
+- Limit to 5 exchanges max, but end sooner if it feels complete.
 
-FLOW: Surface → What is it about? → Why it matters → Insights/wrap when ready`;
+FLOW:
+Surface → What’s it about? → Why it matters → Insight & wrap-up`;
 };
 
 export async function POST(request: Request) {

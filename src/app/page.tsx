@@ -27,6 +27,7 @@ const cuddles = [
   { id: 'olly-jr', name: 'Olly Jr.', image: '/assets/Olly Jr.png' },
 ];
 
+
 const benefits = [
   {
     stat: 83,
@@ -81,10 +82,12 @@ function AnimatedNumber({ value, suffix }: { value: number; suffix: string }) {
 
 export default function Home() {
   const router = useRouter();
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [userId, setUserId] = useState<string>('');
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [selectedCuddle, setSelectedCuddle] = useState<string | null>(null);
 
   // Group consecutive assistant messages
   const groupedMessages = chatMessages.reduce((acc, message, index) => {
@@ -152,8 +155,12 @@ export default function Home() {
   };
 
   const handleStartJournaling = async () => {
-    // At this point we have a valid user ID either from storage or newly created
-    router.push('/journal');
+    if (!selectedCuddle) return;
+    router.push(`/journal?cuddle=${selectedCuddle}`);
+  };
+
+  const startJournaling = () => {
+    handleStartJournaling();
   };
 
   return (
@@ -185,24 +192,13 @@ export default function Home() {
 
         <div className="relative z-10 container mx-auto px-4 py-20 flex flex-col lg:flex-row items-center justify-between min-h-screen">
           {/* Left side - Content */}
-          <div className="flex-1 pt-20max-w-2xl animate-fade-in">
-            <div className="mb-1 pt-3">
-              <motion.span 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium mb-6"
-              >
-                <Sparkles className="w-4 h-4" />
-                Start Your Journey Today
-              </motion.span>
-            </div>
+          <div className="flex-1 pt-20max-w-2xl animate-fade-in ">
             
             <motion.h1 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="text-5xl lg:text-7xl font-bold text-gray-800 mb-6 leading-tight"
+              className="text-5xl lg:text-7xl font-bold text-gray-800 mb-6 leading-tight text-center"
             >
               Let's{" "}
               <span className="text-primary relative">
@@ -215,7 +211,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
-              className="text-mg text-gray-500 mb-6 leading-relaxed max-w-xl"
+              className="text-mg text-gray-500 mb-6 leading-relaxed max-w-xl text-center"
             >
               A soft-hearted companion that listens, comforts, and helps you find calm in the chaos 💜🫶🏼
             </motion.p>
@@ -225,9 +221,9 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.9 }}
-              className="text-xl text-primary font-medium mb-4"
+              className="text-xl text-primary font-medium mb-4 text-center" 
             >
-              Choose your journaling companion to begin✨
+              Select your favorite Cuddle to begin✨
             </motion.div>
 
             <motion.div
@@ -239,10 +235,13 @@ export default function Home() {
               {['olly-sr', 'ellie-sr', 'olly-jr', 'ellie-jr'].map((cuddle) => (
                 <motion.button
                   key={cuddle}
-                  onClick={() => router.push(`/journal?cuddle=${cuddle}`)}
+                  onClick={() => setSelectedCuddle(cuddle)}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className={`p-2 sm:p-3 rounded-2xl border-2 transition-colors hover:border-primary/50 hover:bg-primary/5`}
+                  className={`p-2 sm:p-3 rounded-2xl border-2 transition-colors 
+                    ${selectedCuddle === cuddle 
+                      ? 'border-primary bg-primary/10' 
+                      : 'hover:border-primary/50 hover:bg-primary/5'}`}
                 >
                   <div className="aspect-square relative mb-2">
                     <Image
@@ -257,6 +256,25 @@ export default function Home() {
                   </p>
                 </motion.button>
               ))}
+            </motion.div>
+            
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.2 }}
+              className="flex justify-center"
+            >
+              <motion.button
+                onClick={() => selectedCuddle ? router.push(`/journal?cuddle=${selectedCuddle}`) : null}
+                whileHover={selectedCuddle ? { scale: 1.05 } : {}}
+                whileTap={selectedCuddle ? { scale: 0.95 } : {}}
+                className={`px-8 py-3 rounded-xl font-medium text-lg transition-all
+                  ${selectedCuddle 
+                    ? 'bg-primary text-white shadow-lg hover:shadow-xl' 
+                    : 'bg-primary/10 text-primary cursor-not-allowed'}`}
+              >
+                {selectedCuddle ? 'Start Journalling' : 'Select a Cuddle Buddy'}
+              </motion.button>
             </motion.div>
 
           </div>
@@ -301,10 +319,21 @@ export default function Home() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-4xl font-semibold text-primary mb-8 text-center tracking-[0.02em]"
+            className="text-4xl font-semibold text-primary mb-4 text-center tracking-[0.02em]"
           >
             Your Space 🏡
           </motion.h2>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8 }}
+            className="text-center max-w-2xl mx-auto mb-8 text-gray-500"
+          >
+            This is your personal reflection space. <br />
+            Once you start journaling, your entries will be safely stored here.
+          </motion.div>
+
           <div className="max-w-3xl mx-auto">
             <DateSelector
               onDateSelect={handleDateSelect}
@@ -315,7 +344,7 @@ export default function Home() {
                 onClick={handleStartJournaling}
                 className="bg-primary text-white px-8 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors"
               >
-                Start Journaling
+                {selectedCuddle ? 'Continue Your Journey' : 'Start Your Journey'}
               </button>
             </div>
           </div>
@@ -382,11 +411,15 @@ export default function Home() {
       </section>
 
       <ChatHistoryModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        date={selectedDate || ''}
-        messages={groupedMessages}
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        date={selectedDate}
+        messages={chatMessages}
         onStartJournaling={handleStartJournaling}
+        selectedCuddle={selectedCuddle ?? ''}
+        cuddleName={selectedCuddle 
+          ? selectedCuddle.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+          : ''}
       />
     </main>
   );

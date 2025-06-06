@@ -16,8 +16,8 @@ interface ChatHistoryModalProps {
     content: string;
   }>;
   onStartJournaling: () => void;
-  selectedCuddle: string;
-  cuddleName: string;
+  selectedCuddle?: string;
+  cuddleName?: string;
 }
 
 export default function ChatHistoryModal({ 
@@ -26,8 +26,8 @@ export default function ChatHistoryModal({
   date, 
   messages, 
   onStartJournaling,
-  selectedCuddle,
-  cuddleName
+  selectedCuddle = '',
+  cuddleName = ''
 }: ChatHistoryModalProps) {
   const router = useRouter();
   

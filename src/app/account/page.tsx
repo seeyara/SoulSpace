@@ -4,54 +4,144 @@ import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWithinInterval, subDays } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import ChatHistoryModal from '@/components/ChatHistoryModal';
+import { generateAnonymousName } from '@/lib/utils/nameGenerator';
 
 export default function Account() {
-  const [userName, setUserName] = useState('Divya Singh');
+  const [userName, setUserName] = useState('');
   const [entries, setEntries] = useState<string[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [userId, setUserId] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showChatHistory, setShowChatHistory] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
-  const [selectedCuddle, setSelectedCuddle] = useState('ellie-sr');
+  const [selectedCuddle, setSelectedCuddle] = useState('olly-sr');
   const [memberSince, setMemberSince] = useState<string>('');
+  const [streak, setStreak] = useState(0);
   const router = useRouter();
 
   useEffect(() => {
-    const storedUserId = localStorage.getItem('soul_journal_user_id');
-    if (storedUserId) {
+    const initializeUser = async () => {
+      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      if (!storedUserId) {
+        // New user without ID - generate name and redirect to journal
+        const generatedName = generateAnonymousName();
+        setUserName(generatedName);
+        localStorage.setItem('soul_journal_anonymous_name', generatedName);
+        router.push('/journal');
+        return;
+      }
+
       setUserId(storedUserId);
-      fetchUserData(storedUserId);
-      fetchEntries(storedUserId);
+      await Promise.all([
+        fetchUserData(storedUserId),
+        fetchEntries(storedUserId)
+      ]);
+    };
+
+    initializeUser();
+  }, [router]);
+
+  const calculateStreak = (dates: string[]): number => {
+    if (!dates.length) return 0;
+    
+    const sortedDates = [...dates].sort();
+    const today = new Date();
+    let currentStreak = 0;
+    let date = today;
+
+    // Check backwards from today until we find a break in the streak
+    while (true) {
+      const dateStr = format(date, 'yyyy-MM-dd');
+      if (!dates.includes(dateStr)) {
+        break;
+      }
+      currentStreak++;
+      date = subDays(date, 1);
     }
-  }, []);
+
+    return currentStreak;
+  };
 
   const fetchUserData = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('name, email')
-      .eq('id', userId)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('anonymous_name, created_at')
+        .eq('id', userId)
+        .single();
 
-    if (data?.name) {
-      setUserName(data.name);
+      if (error) {
+        console.error('Error fetching user data:', error);
+        // For new users or error cases, generate and save a new name
+        const storedName = localStorage.getItem('soul_journal_anonymous_name');
+        const nameToUse = storedName || generateAnonymousName();
+        
+        if (!storedName) {
+          localStorage.setItem('soul_journal_anonymous_name', nameToUse);
+        }
+        
+        setUserName(nameToUse);
+        
+        // Try to save the generated name to database
+        await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, anonymousName: nameToUse }),
+        });
+        
+        return;
+      }
+
+      if (data) {
+        const name = data.anonymous_name || generateAnonymousName();
+        setUserName(name);
+        localStorage.setItem('soul_journal_anonymous_name', name);
+        
+        if (data.created_at) {
+          setMemberSince(format(new Date(data.created_at), 'd MMMM yyyy'));
+        }
+      }
+    } catch (error) {
+      console.error('Error in fetchUserData:', error);
+      // Fallback to localStorage or generate new name
+      const storedName = localStorage.getItem('soul_journal_anonymous_name') || generateAnonymousName();
+      setUserName(storedName);
+      localStorage.setItem('soul_journal_anonymous_name', storedName);
     }
   };
 
   const fetchEntries = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('chats')
-      .select('date')
-      .eq('user_id', userId)
-      .order('date', { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from('chats')
+        .select('date')
+        .eq('user_id', userId)
+        .order('date', { ascending: true });
 
-    if (data && data.length > 0) {
-      setEntries(data.map(entry => entry.date));
-      const firstEntry = new Date(data[0].date);
-      setMemberSince(format(firstEntry, 'd MMMM yyyy'));
+      if (error) {
+        console.error('Error fetching entries:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const entryDates = data.map(entry => entry.date);
+        setEntries(entryDates);
+        setStreak(calculateStreak(entryDates));
+        
+        const firstEntry = new Date(data[0].date);
+        setMemberSince(format(firstEntry, 'd MMMM yyyy'));
+      } else {
+        // No entries yet
+        setStreak(0);
+        setMemberSince('Today');
+      }
+    } catch (error) {
+      console.error('Error in fetchEntries:', error);
+      setStreak(0);
+      setMemberSince('Today');
     }
   };
 
@@ -132,12 +222,12 @@ export default function Account() {
         <div className="flex items-center gap-6 mb-8">
           <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
             <span className="text-2xl text-primary font-semibold">
-              {userName.charAt(0)}
+              {userName ? userName.split(' ').map(word => word[0]).join('') : ''}
             </span>
           </div>
           <div>
             <h1 className="text-2xl font-semibold text-gray-900 mb-1">
-              {userName}
+              {userName || 'Loading...'}
             </h1>
             <p className="text-gray-500">
               Member since {memberSince || 'Today'}
@@ -161,31 +251,31 @@ export default function Account() {
         </motion.div>
 
         {/* Stats and Cuddle Companion */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-2 gap-4 pb-4">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
             className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border-2 border-primary/5 hover:border-primary/10 transition-all"
           >
-            <h3 className="text-sm text-gray-500 mb-1">Current Streak</h3>
-            <p className="text-2xl font-semibold text-primary">3 days</p>
+            <h3 className="text-sm text-gray-500 mb-1">Current Streak 🔥</h3>
+            <p className="text-2xl font-semibold text-primary">{streak} days</p>
           </motion.div>
 
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border-2 border-primary/5 hover:border-primary/10 transition-all col-span-2"
+            className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border-2 border-primary/5 hover:border-primary/10 transition-all"
           >
             <h3 className="text-sm text-gray-500 mb-2">Your Cuddle 💜</h3>
             <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-full bg-primary/5 flex items-center justify-center overflow-hidden">
+              <div className="w-12 h-12 flex items-center justify-center overflow-hidden">
                 <Image
                   src={getCuddleImage(selectedCuddle)}
                   alt={getCuddleName(selectedCuddle)}
-                  width={48}
-                  height={48}
+                  width={100}
+                  height={100}
                   className="object-cover"
                 />
               </div>
