@@ -121,36 +121,24 @@ export default function Home() {
         return; // Don't open modal, they need to start journaling first
       }
 
-      console.log('Fetching chat for date:', date, 'user:', storedUserId);
+      // Fetch chat messages using the API route
+      const response = await fetch(`/api/chat?userId=${storedUserId}&date=${date}`);
+      const { data } = await response.json();
       
-      // Fetch chat messages for the selected date and user
-      const { data: chat, error } = await supabase
-        .from('chats')
-        .select('*')
-        .eq('date', date)
-        .eq('user_id', storedUserId)
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // No rows returned - this is expected for new dates
-          setChatMessages([]);
-          setIsModalOpen(true);
-          return;
+      if (data?.messages) {
+        setChatMessages(data.messages);
+        if (data.cuddleId) {
+          setSelectedCuddle(data.cuddleId);
         }
-        console.error('Error fetching chat:', error);
-        return;
-      }
-
-      if (chat?.messages) {
-        setChatMessages(chat.messages);
-        setIsModalOpen(true);
+        setIsHistoryModalOpen(true);
       } else {
         setChatMessages([]);
-        setIsModalOpen(true);
+        setIsHistoryModalOpen(true);
       }
     } catch (error) {
       console.error('Error in handleDateSelect:', error);
+      setChatMessages([]);
+      setIsHistoryModalOpen(true);
     }
   };
 

@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "docker:deploy": "chmod +x ./scripts/docker-deploy.sh && ./scripts/docker-deploy.sh",
+    "docker:build": "docker build -t soulspace-prod .",
+    "docker:run": "docker run -p 3000:3000 soulspace-prod"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.4",

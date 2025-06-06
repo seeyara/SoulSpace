@@ -15,7 +15,7 @@ export default function Account() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [userId, setUserId] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [showChatHistory, setShowChatHistory] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [selectedCuddle, setSelectedCuddle] = useState('olly-sr');
   const [memberSince, setMemberSince] = useState<string>('');
@@ -69,7 +69,7 @@ export default function Account() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('anonymous_name, created_at')
+        .select('name, created_at')
         .eq('id', userId)
         .single();
 
@@ -89,14 +89,14 @@ export default function Account() {
         await fetch('/api/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, anonymousName: nameToUse }),
+          body: JSON.stringify({ userId, name: nameToUse }),
         });
         
         return;
       }
 
       if (data) {
-        const name = data.anonymous_name || generateAnonymousName();
+        const name = data.name || generateAnonymousName();
         setUserName(name);
         localStorage.setItem('soul_journal_anonymous_name', name);
         
@@ -152,12 +152,18 @@ export default function Account() {
       
       if (data?.messages) {
         setChatMessages(data.messages);
-        setShowChatHistory(true);
+        if (data.cuddleId) {
+          setSelectedCuddle(data.cuddleId);
+        }
+        setIsModalOpen(true);
+      } else {
+        setChatMessages([]);
+        setIsModalOpen(true);
       }
     } catch (error) {
       console.error('Error fetching chat history:', error);
       setChatMessages([]);
-      setShowChatHistory(true);
+      setIsModalOpen(true);
     }
   };
 
@@ -328,18 +334,15 @@ export default function Account() {
         </motion.div>
       </motion.div>
 
-      {/* Chat History Modal */}
-      {selectedDate && (
-        <ChatHistoryModal
-          isOpen={showChatHistory}
-          onClose={() => setShowChatHistory(false)}
-          date={selectedDate}
-          messages={chatMessages}
-          onStartJournaling={handleStartJournaling}
-          selectedCuddle={selectedCuddle}
-          cuddleName={getCuddleName(selectedCuddle)}
-        />
-      )}
+      <ChatHistoryModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        date={selectedDate || ''}
+        messages={chatMessages}
+        onStartJournaling={handleStartJournaling}
+        selectedCuddle={selectedCuddle}
+        cuddleName={getCuddleName(selectedCuddle)}
+      />
     </div>
   );
 } 

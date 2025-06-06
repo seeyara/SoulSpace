@@ -4,18 +4,18 @@ import { generateAnonymousName } from '@/lib/utils/nameGenerator';
 
 export async function POST(request: Request) {
   try {
-    const { userId, anonymousName } = await request.json();
+    const { userId, name } = await request.json();
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    // Create or update user with anonymous name
+    // Create or update user with name
     const { data, error } = await supabase
       .from('users')
       .upsert({
         id: userId,
-        name: anonymousName || generateAnonymousName(),
+        name: name || generateAnonymousName(),
         updated_at: new Date().toISOString()
       })
       .select()
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
     // Store in localStorage as well
     if (typeof window !== 'undefined') {
-      localStorage.setItem('soul_journal_anonymous_name', data.anonymous_name);
+      localStorage.setItem('soul_journal_anonymous_name', data.name);
     }
 
     return NextResponse.json(data);
