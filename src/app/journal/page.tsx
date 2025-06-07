@@ -28,7 +28,11 @@ function JournalContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isWelcomeBack, setIsWelcomeBack] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [userName, setUserName] = useState<string>('User');
+  const [userName, setUserName] = useState<string>('Username');
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [page, setPage] = useState(1);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Initialize user and start intro message
   useEffect(() => {
@@ -47,7 +51,7 @@ function JournalContent() {
             .eq('id', storedUserId)
             .single();
             
-          setUserName(data?.name || 'User');
+          setUserName(data?.name || 'Username');
           return;
         }
 
@@ -73,7 +77,7 @@ function JournalContent() {
             console.log('Created new user:', newUserId);
             localStorage.setItem('soul_journal_user_id', newUserId);
             setUserId(newUserId);
-            setUserName('User');
+            setUserName('Username');
           }
         } catch (error) {
           console.error('Error in user creation:', error);
@@ -134,7 +138,7 @@ function JournalContent() {
       const today = format(new Date(), 'yyyy-MM-dd');
 
       try {
-        const response = await fetch(`/api/chat?userId=${storedUserId}&date=${today}`);
+        const response = await fetch(`/api/chat?userId=${storedUserId}&date=${today}&page=1`);
         const { data } = await response.json();
 
         if (data?.messages && data.messages.length > 0) {
@@ -145,6 +149,8 @@ function JournalContent() {
           );
 
           setMessages(data.messages);
+          setHasMoreMessages(data.hasMore);
+          setPage(1);
 
           if (!hasWelcomeBack) {
             // Add continuation message after loading chat history
@@ -481,6 +487,53 @@ function JournalContent() {
     }
   }, [showStreakModal, userId, userName]);
 
+  // Add scroll event listener
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = async () => {
+      if (isLoadingMore || !hasMoreMessages) return;
+
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      // If we're near the top (scrollTop is small), load more messages
+      if (scrollTop < 100) {
+        setIsLoadingMore(true);
+        try {
+          const storedUserId = localStorage.getItem('soul_journal_user_id');
+          if (!storedUserId) return;
+
+          const today = format(new Date(), 'yyyy-MM-dd');
+          const response = await fetch(`/api/chat?userId=${storedUserId}&date=${today}&page=${page + 1}`);
+          const { data } = await response.json();
+
+          if (data?.messages && data.messages.length > 0) {
+            // Preserve scroll position
+            const prevHeight = container.scrollHeight;
+            
+            setMessages(prev => [...data.messages, ...prev]);
+            setPage(prev => prev + 1);
+
+            // Restore scroll position
+            requestAnimationFrame(() => {
+              const newHeight = container.scrollHeight;
+              container.scrollTop = newHeight - prevHeight;
+            });
+          } else {
+            setHasMoreMessages(false);
+          }
+        } catch (error) {
+          console.error('Error loading more messages:', error);
+        } finally {
+          setIsLoadingMore(false);
+        }
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [page, isLoadingMore, hasMoreMessages]);
+
   return (
     <main className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -510,8 +563,13 @@ function JournalContent() {
       </header>
 
       {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" ref={messagesContainerRef}>
         <div className="max-w-3xl mx-auto space-y-4 px-4 pt-20 pb-24">
+          {isLoadingMore && (
+            <div className="flex justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            </div>
+          )}
           <AnimatePresence>
             {messages.map((message, index) => {
               const isLastAssistantMessage = message.role === 'assistant' &&
@@ -625,7 +683,7 @@ function JournalContent() {
                       onClick={handleFinishEntry}
                       className="text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
                     >
-                      Finish Entry
+                      End chat
                     </button>
                     <button
                       onClick={handleContinue}
@@ -649,7 +707,7 @@ function JournalContent() {
                         onClick={handleFinishEntry}
                         className="text-primary/70 border-2 border-primary/20 px-2 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
                       >
-                        Finish Entry
+                        End chat
                       </button>
                       <button
                         type="submit"

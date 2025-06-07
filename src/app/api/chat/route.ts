@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 
+const MESSAGES_PER_PAGE = 5;
+
 // Save chat messages
 export async function POST(request: Request) {
   try {
@@ -29,12 +31,13 @@ export async function POST(request: Request) {
   }
 }
 
-// Get chat history
+// Get chat history with pagination
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const date = searchParams.get('date');
+    const page = parseInt(searchParams.get('page') || '1');
 
     if (!userId || !date) {
       return NextResponse.json(
@@ -55,10 +58,16 @@ export async function GET(request: Request) {
     }
 
     if (data) {
+      const allMessages = data.messages;
+      const startIndex = Math.max(0, allMessages.length - (page * MESSAGES_PER_PAGE));
+      const endIndex = Math.max(0, allMessages.length - ((page - 1) * MESSAGES_PER_PAGE));
+      const paginatedMessages = allMessages.slice(startIndex, endIndex);
+
       return NextResponse.json({ 
         data: {
-          messages: data.messages,
-          cuddleId: data.cuddle_id
+          messages: paginatedMessages,
+          cuddleId: data.cuddle_id,
+          hasMore: startIndex > 0
         }
       });
     }

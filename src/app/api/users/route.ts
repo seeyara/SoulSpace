@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       .from('users')
       .upsert({
         id: userId,
-        name: name || 'User',
+        name: name || 'Username',
         updated_at: new Date().toISOString()
       })
       .select()

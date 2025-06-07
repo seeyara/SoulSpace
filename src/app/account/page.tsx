@@ -26,7 +26,7 @@ export default function Account() {
     const initializeUser = async () => {
       const storedUserId = localStorage.getItem('soul_journal_user_id');
       if (!storedUserId) {
-        setUserName('User');
+        setUserName('Username');
         router.push('/journal');
         return;
       }
@@ -42,8 +42,8 @@ export default function Account() {
   }, [router]);
 
   const handleNameChange = async (newName: string) => {
-    if (newName.trim() === 'User') {
-      setUserName('User');
+    if (newName.trim() === 'Username') {
+      setUserName('Username');
       setIsEditingName(false);
       return;
     }
@@ -97,18 +97,18 @@ export default function Account() {
 
       if (error) {
         console.error('Error fetching user data:', error);
-        setUserName('User');
+        setUserName('Username');
         return;
       }
 
       if (data?.name) {
         setUserName(data.name);
       } else {
-        setUserName('User');
+        setUserName('Username');
       }
     } catch (error) {
       console.error('Error in fetchUserData:', error);
-      setUserName('User');
+      setUserName('Username');
     }
   };
 
@@ -248,7 +248,7 @@ export default function Account() {
                 />
                 <button
                   onClick={handleNameSubmit}
-                  className="text-blue-600 hover:text-blue-800 whitespace-nowrap"
+                  className="text-primary hover:text-primary/80 whitespace-nowrap"
                 >
                   Save
                 </button>

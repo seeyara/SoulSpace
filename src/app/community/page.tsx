@@ -6,6 +6,8 @@ import { Heart, MessageCircle, X } from 'lucide-react';
 import { LockClosedIcon } from '@heroicons/react/24/solid';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import CommunityAccessModal from '@/components/CommunityAccessModal';
+import { supabase } from '@/lib/supabase';
 
 type Reply = {
   id: string;
@@ -31,11 +33,29 @@ export default function Community() {
   const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
   const [newReply, setNewReply] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [replies, setReplies] = useState<Reply[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userId, setUserId] = useState<string>('');
+  const [showAccessModal, setShowAccessModal] = useState(false);
+  const [isInvitePending, setIsInvitePending] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
+    const storedUserId = localStorage.getItem('soul_journal_user_id');
+    const invitePending = localStorage.getItem('soul_community_invite_pending') === 'true';
+    
+    if (storedUserId) {
+      setUserId(storedUserId);
+    }
+    
+    setIsInvitePending(invitePending);
+    
+    if (!invitePending) {
+      setShowAccessModal(true);
+    }
+    
     fetchQuestions();
-  }, [activeTag]);
+  }, []);
 
   const fetchQuestions = async () => {
     try {
@@ -54,7 +74,6 @@ export default function Community() {
 
   const fetchReplies = async (questionId: string) => {
     try {
-      const userId = localStorage.getItem('soul_journal_user_id');
       const response = await fetch(`/api/community/replies?questionId=${questionId}`, {
         headers: {
           'x-user-id': userId || ''
@@ -80,7 +99,6 @@ export default function Community() {
   };
 
   const handleLikeReply = async (replyId: string) => {
-    const userId = localStorage.getItem('soul_journal_user_id');
     if (!userId || !selectedQuestion) return;
 
     try {
@@ -114,7 +132,6 @@ export default function Community() {
     e.preventDefault();
     if (!newReply.trim() || !selectedQuestion) return;
 
-    const userId = localStorage.getItem('soul_journal_user_id');
     if (!userId) {
       router.push('/account');
       return;
@@ -155,15 +172,38 @@ export default function Community() {
   );
 
   return (
-    <div className="min-h-screen bg-background relative">
+    <main className="min-h-screen bg-background">
       {/* Locked Overlay */}
       <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
         <LockClosedIcon className="w-16 h-16 text-white mb-4" />
-        <h2 className="text-2xl font-semibold text-white mb-2">Coming Soon</h2>
-        <p className="text-gray-200 text-center max-w-sm px-4">
-          The community feature is currently under development. Check back soon!
-        </p>
+        {isInvitePending ? (
+          <>
+            <h2 className="text-2xl font-semibold text-white mb-2">Your invite is on its way! ✨</h2>
+            <p className="text-gray-200 text-center max-w-sm px-4 mb-6">
+              You'll soon get access to the exclusive Whispr Community
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 className="text-2xl font-semibold text-white mb-2">Get Exclusive Access</h2>
+            <p className="text-gray-200 text-center max-w-sm px-4 mb-6">
+              The community feature is currently exclusive. Get access now!
+            </p>
+            <button
+              onClick={() => setShowAccessModal(true)}
+              className="bg-white text-primary px-8 py-3 rounded-full font-medium hover:bg-white/90 transition-colors"
+            >
+              Unlock Access
+            </button>
+          </>
+        )}
       </div>
+
+      <CommunityAccessModal
+        isOpen={showAccessModal}
+        onClose={() => setShowAccessModal(false)}
+        userId={userId}
+      />
 
       {/* Header */}
       <header className="fixed top-0 w-full bg-background/80 backdrop-blur-sm z-40 p-4 border-b border-primary/10">
@@ -341,6 +381,6 @@ export default function Community() {
           )}
         </AnimatePresence>
       </div>
-    </div>
+    </main>
   );
 } 

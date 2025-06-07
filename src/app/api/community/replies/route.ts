@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       .eq('id', userId)
       .single();
 
-    const userName = userData?.name || 'User';
+    const userName = userData?.name || 'Username';
 
     const { data: reply, error } = await supabase
       .from('community_replies')
