@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-// import { config } from '@/lib/config';
-import { cuddleData } from '@/data/cuddles';
 import type { CuddleId } from '@/types/cuddles';
 import dotenv from 'dotenv';
 

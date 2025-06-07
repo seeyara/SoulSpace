@@ -28,18 +28,25 @@ type Question = {
 };
 
 export default function Community() {
+  // Group related state
+  const [userId, setUserId] = useState<string>('');
+  const [isInvitePending, setIsInvitePending] = useState(false);
+  const [showAccessModal, setShowAccessModal] = useState(false);
+
+  // Questions and replies state
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
-  const [newReply, setNewReply] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
   const [replies, setReplies] = useState<Reply[]>([]);
+  const [newReply, setNewReply] = useState('');
+  
+  // Loading states
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [userId, setUserId] = useState<string>('');
-  const [showAccessModal, setShowAccessModal] = useState(false);
-  const [isInvitePending, setIsInvitePending] = useState(false);
+
   const router = useRouter();
 
+  // Initialize user and access state
   useEffect(() => {
     const storedUserId = localStorage.getItem('soul_journal_user_id');
     const invitePending = localStorage.getItem('soul_community_invite_pending') === 'true';
@@ -53,9 +60,12 @@ export default function Community() {
     if (!invitePending) {
       setShowAccessModal(true);
     }
-    
-    fetchQuestions();
   }, []);
+
+  // Fetch questions when tag changes
+  useEffect(() => {
+    fetchQuestions();
+  }, [activeTag]);
 
   const fetchQuestions = async () => {
     try {
@@ -65,9 +75,9 @@ export default function Community() {
       if (!response.ok) throw new Error(data.error);
       
       setQuestions(data);
-      setIsLoading(false);
     } catch (error) {
       console.error('Error fetching questions:', error);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -113,16 +123,19 @@ export default function Community() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
 
-      const updatedReplies = selectedQuestion.replies.map(reply =>
-        reply.id === replyId
-          ? { ...reply, likes: data.likes, is_liked: data.is_liked }
-          : reply
-      );
+      // Update replies in the selected question
+      if (selectedQuestion) {
+        const updatedReplies = selectedQuestion.replies.map(reply =>
+          reply.id === replyId
+            ? { ...reply, likes: data.likes, is_liked: data.is_liked }
+            : reply
+        );
 
-      setSelectedQuestion({
-        ...selectedQuestion,
-        replies: updatedReplies
-      });
+        setSelectedQuestion({
+          ...selectedQuestion,
+          replies: updatedReplies
+        });
+      }
     } catch (error) {
       console.error('Error toggling like:', error);
     }
@@ -136,6 +149,8 @@ export default function Community() {
       router.push('/account');
       return;
     }
+
+    setIsSubmitting(true);
 
     try {
       const response = await fetch('/api/community/replies', {
@@ -155,21 +170,32 @@ export default function Community() {
 
       setNewReply('');
       
+      // Refresh replies and questions
       const replies = await fetchReplies(selectedQuestion.id);
       setSelectedQuestion({
         ...selectedQuestion,
         replies
       });
-
       fetchQuestions();
     } catch (error) {
       console.error('Error submitting reply:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const allTags = Array.from(
     new Set(questions.flatMap(q => q.tags))
   );
+
+  // Render loading state
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-background">
@@ -193,7 +219,7 @@ export default function Community() {
               onClick={() => setShowAccessModal(true)}
               className="bg-white text-primary px-8 py-3 rounded-full font-medium hover:bg-white/90 transition-colors"
             >
-              Unlock Access
+              Unlock Access ✨
             </button>
           </>
         )}

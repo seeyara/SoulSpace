@@ -351,11 +351,28 @@ export default function Account() {
                 <div
                   key={dateStr}
                   onClick={() => handleDateClick(date)}
-                  className={`aspect-square rounded-xl flex items-center justify-center cursor-pointer transition-all ${
+                  className={`aspect-square rounded-xl flex items-center justify-center cursor-pointer transition-all shadow-sm hover:shadow-md ${
                     hasEntry ? 'bg-primary text-white hover:bg-primary/90' : 'hover:bg-primary/5'
                   }`}
                 >
-                  <span className="text-sm">{format(date, 'd')}</span>
+                  <div className="relative">
+                    <span className="text-sm">{format(date, 'd')}</span>
+                    {hasEntry && (
+                      <svg
+                        className="w-3 h-3 absolute -top-2 -right-2 text-white"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={3}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    )}
+                  </div>
                 </div>
               );
             })}

@@ -327,14 +327,6 @@ export default function Home() {
               onDateSelect={handleDateSelect}
               selectedDate={selectedDate}
             />
-            <div className="mt-8 flex justify-center">
-              <button
-                onClick={handleStartJournaling}
-                className="bg-primary text-white px-8 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors"
-              >
-                {selectedCuddle ? 'Continue Your Journey' : 'Start Your Journey'}
-              </button>
-            </div>
           </div>
         </div>
       </section>

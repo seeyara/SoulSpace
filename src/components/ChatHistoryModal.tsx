@@ -97,14 +97,14 @@ export default function ChatHistoryModal({
                 />
               </div>
               <div>
-                <Dialog.Title 
-                  as="h3" 
+            <Dialog.Title 
+              as="h3" 
                   className="text-lg font-medium leading-6 text-gray-900"
-                >
-                  Chat with {cuddleName}
-                </Dialog.Title>
+            >
+              Chat with {cuddleName}
+            </Dialog.Title>
                 <div className="text-sm text-gray-500">
-                  {format(new Date(date), 'MMMM d, yyyy')}
+              {format(new Date(date), 'MMMM d, yyyy')}
                 </div>
               </div>
             </div>
@@ -147,12 +147,12 @@ export default function ChatHistoryModal({
                     {getEmptyStateMessage().message}
                   </p>
                   {!isFuture(new Date(date)) && (
-                    <button
-                      onClick={onStartJournaling}
-                      className="bg-primary text-white px-6 py-3 rounded-full text-base font-medium hover:bg-primary/90 transition-colors"
-                    >
+                  <button
+                    onClick={onStartJournaling}
+                    className="bg-primary text-white px-6 py-3 rounded-full text-base font-medium hover:bg-primary/90 transition-colors"
+                  >
                       {isToday(new Date(date)) ? "Start Today's Entry" : "Add Entry for This Day"}
-                    </button>
+                  </button>
                   )}
                 </div>
               )}
