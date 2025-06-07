@@ -62,10 +62,8 @@ jobs:
             git pull origin main
             
             # Install dependencies
-            npm install
-            
-            # Build the application
-            npm run build
+            sudo docker stop soulspace || true
+            sudo docker rm soulspace || true
             
             # Restart the PM2 process
-            pm2 restart soulspace || pm2 start npm --name "soulspace" -- start
+            sudo docker run   --name soulspace   --restart unless-stopped   -p 80:3000  seeyara96/soulspace
