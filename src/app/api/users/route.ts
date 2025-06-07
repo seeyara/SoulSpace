@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { generateAnonymousName } from '@/lib/utils/nameGenerator';
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +14,7 @@ export async function POST(request: Request) {
       .from('users')
       .upsert({
         id: userId,
-        name: name || generateAnonymousName(),
+        name: name || 'User',
         updated_at: new Date().toISOString()
       })
       .select()

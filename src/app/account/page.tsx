@@ -7,10 +7,10 @@ import { supabase } from '@/lib/supabase';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWithinInterval, subDays } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import ChatHistoryModal from '@/components/ChatHistoryModal';
-import { generateAnonymousName } from '@/lib/utils/nameGenerator';
 
 export default function Account() {
   const [userName, setUserName] = useState('');
+  const [isEditingName, setIsEditingName] = useState(false);
   const [entries, setEntries] = useState<string[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [userId, setUserId] = useState<string>('');
@@ -26,10 +26,7 @@ export default function Account() {
     const initializeUser = async () => {
       const storedUserId = localStorage.getItem('soul_journal_user_id');
       if (!storedUserId) {
-        // New user without ID - generate name and redirect to journal
-        const generatedName = generateAnonymousName();
-        setUserName(generatedName);
-        localStorage.setItem('soul_journal_anonymous_name', generatedName);
+        setUserName('User');
         router.push('/journal');
         return;
       }
@@ -44,10 +41,35 @@ export default function Account() {
     initializeUser();
   }, [router]);
 
+  const handleNameChange = async (newName: string) => {
+    if (newName.trim() === 'User') {
+      setUserName('User');
+      setIsEditingName(false);
+      return;
+    }
+
+    setUserName(newName);
+    
+    if (userId) {
+      try {
+        await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, name: newName }),
+        });
+      } catch (error) {
+        console.error('Error updating username:', error);
+      }
+    }
+  };
+
+  const handleNameSubmit = () => {
+    handleNameChange(userName);
+    setIsEditingName(false);
+  };
+
   const calculateStreak = (dates: string[]): number => {
     if (!dates.length) return 0;
-    
-    const sortedDates = [...dates].sort();
     const today = new Date();
     let currentStreak = 0;
     let date = today;
@@ -69,47 +91,24 @@ export default function Account() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('name, created_at')
+        .select('name')
         .eq('id', userId)
         .single();
 
       if (error) {
         console.error('Error fetching user data:', error);
-        // For new users or error cases, generate and save a new name
-        const storedName = localStorage.getItem('soul_journal_anonymous_name');
-        const nameToUse = storedName || "UserName";
-        
-        if (!storedName) {
-          localStorage.setItem('soul_journal_anonymous_name', nameToUse);
-        }
-        
-        setUserName(nameToUse);
-        
-        // Try to save the generated name to database
-        await fetch('/api/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, name: nameToUse }),
-        });
-        
+        setUserName('User');
         return;
       }
 
-      if (data) {
-        const name = data.name || generateAnonymousName();
-        setUserName(name);
-        localStorage.setItem('soul_journal_anonymous_name', name);
-        
-        if (data.created_at) {
-          setMemberSince(format(new Date(data.created_at), 'd MMMM yyyy'));
-        }
+      if (data?.name) {
+        setUserName(data.name);
+      } else {
+        setUserName('User');
       }
     } catch (error) {
       console.error('Error in fetchUserData:', error);
-      // Fallback to localStorage or generate new name
-      const storedName = localStorage.getItem('soul_journal_anonymous_name') || generateAnonymousName();
-      setUserName(storedName);
-      localStorage.setItem('soul_journal_anonymous_name', storedName);
+      setUserName('User');
     }
   };
 
@@ -131,6 +130,7 @@ export default function Account() {
         setEntries(entryDates);
         setStreak(calculateStreak(entryDates));
         
+        // Set member since to the first entry date
         const firstEntry = new Date(data[0].date);
         setMemberSince(format(firstEntry, 'd MMMM yyyy'));
       } else {
@@ -228,13 +228,42 @@ export default function Account() {
         <div className="flex items-center gap-6 mb-8">
           <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
             <span className="text-2xl text-primary font-semibold">
-              {userName ? userName.split(' ').map(word => word[0]).join('') : ''}
+              {userName ? userName[0].toUpperCase() : ''}
             </span>
           </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900 mb-1">
-              {userName || 'Loading...'}
-            </h1>
+          <div className="flex-1">
+            {isEditingName ? (
+              <div className="flex items-center space-x-2 max-w-[200px]">
+                <input
+                  type="text"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  className="border rounded px-2 py-1 text-2xl font-semibold text-gray-900 w-full"
+                  autoFocus
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleNameSubmit();
+                    }
+                  }}
+                />
+                <button
+                  onClick={handleNameSubmit}
+                  className="text-blue-600 hover:text-blue-800 whitespace-nowrap"
+                >
+                  Save
+                </button>
+              </div>
+            ) : (
+              <div 
+                className="flex items-center space-x-2 cursor-pointer"
+                onClick={() => setIsEditingName(true)}
+              >
+                <h1 className="text-2xl font-semibold text-gray-900">
+                  {userName || 'Loading...'}
+                </h1>
+                <span className="text-gray-400 hover:text-gray-600">✏️</span>
+              </div>
+            )}
             <p className="text-gray-500">
               Member since {memberSince || 'Today'}
             </p>

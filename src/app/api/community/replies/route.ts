@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { generateAnonymousName } from '@/lib/utils/nameGenerator';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -59,14 +58,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Generate anonymous name if user hasn't set one
+    // Use default name if user hasn't set one
     const { data: userData } = await supabase
       .from('users')
       .select('name')
       .eq('id', userId)
       .single();
 
-    const userName = userData?.name || generateAnonymousName();
+    const userName = userData?.name || 'User';
 
     const { data: reply, error } = await supabase
       .from('community_replies')

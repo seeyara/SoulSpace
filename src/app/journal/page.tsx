@@ -10,7 +10,6 @@ import type { CuddleId } from '@/types/cuddles';
 import StreakModal from '@/components/StreakModal';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
-import { generateAnonymousName } from '@/lib/utils/nameGenerator';
 import axios from 'axios';
 const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue our conversation or finish this entry?";
 
@@ -29,72 +28,37 @@ function JournalContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isWelcomeBack, setIsWelcomeBack] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [anonymousName, setAnonymousName] = useState<string>('');
+  const [userName, setUserName] = useState<string>('User');
 
   // Initialize user and start intro message
   useEffect(() => {
     const initializeUser = async () => {
       try {
         const storedUserId = localStorage.getItem('soul_journal_user_id');
-        const storedName = localStorage.getItem('soul_journal_anonymous_name');
 
         if (storedUserId) {
           console.log('Using stored user ID:', storedUserId);
           setUserId(storedUserId);
-
-          if (storedName) {
-            setAnonymousName(storedName);
-            // Ensure name is in database
-            try {
-              await fetch('/api/users', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  userId: storedUserId,
-                  name: storedName
-                }),
-              });
-            } catch (error) {
-              console.error('Error syncing name to database:', error);
-            }
-          } else {
-            // Generate new name if none exists
-            const generatedName = generateAnonymousName();
-            try {
-              const response = await fetch('/api/users', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  userId: storedUserId,
-                  name: generatedName
-                }),
-              });
-
-              if (response.ok) {
-                setAnonymousName(generatedName);
-                localStorage.setItem('soul_journal_anonymous_name', generatedName);
-              }
-            } catch (error) {
-              console.error('Error saving new name:', error);
-            }
-          }
+          
+          // Check if user has a custom name
+          const { data } = await supabase
+            .from('users')
+            .select('name')
+            .eq('id', storedUserId)
+            .single();
+            
+          setUserName(data?.name || 'User');
           return;
         }
 
-        // Create new user with generated name
-        const generatedName = generateAnonymousName();
+        // Create new user without setting a name
         const tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
         try {
           const { data: newUser, error: createError } = await supabase
             .from('users')
             .insert({
-              temp_session_id: tempSessionId,
-              name: generatedName
+              temp_session_id: tempSessionId
             })
             .select('id')
             .single();
@@ -108,9 +72,8 @@ function JournalContent() {
             const newUserId = newUser.id;
             console.log('Created new user:', newUserId);
             localStorage.setItem('soul_journal_user_id', newUserId);
-            localStorage.setItem('soul_journal_anonymous_name', generatedName);
             setUserId(newUserId);
-            setAnonymousName(generatedName);
+            setUserName('User');
           }
         } catch (error) {
           console.error('Error in user creation:', error);
@@ -502,7 +465,7 @@ function JournalContent() {
 
   // Add this effect to update the name in the database when finishing entry
   useEffect(() => {
-    if (showStreakModal && userId && anonymousName) {
+    if (showStreakModal && userId && userName) {
       fetch('/api/users', {
         method: 'POST',
         headers: {
@@ -510,13 +473,13 @@ function JournalContent() {
         },
         body: JSON.stringify({
           userId,
-          anonymousName
+          name: userName
         }),
       }).catch(error => {
         console.error('Error updating user name:', error);
       });
     }
-  }, [showStreakModal, userId, anonymousName]);
+  }, [showStreakModal, userId, userName]);
 
   return (
     <main className="min-h-screen bg-background flex flex-col">
