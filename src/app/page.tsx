@@ -194,7 +194,7 @@ export default function Home() {
 
         <div className="relative z-10 container mx-auto px-4 py-20 flex flex-col lg:flex-row items-center justify-between min-h-screen">
           {/* Left side - Content */}
-          <div className="flex-1 pt-5 max-w-2xl animate-fade-in">
+          <div className="flex-1 pt-5 max-w-full animate-fade-in">
             
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -222,7 +222,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
-              className="text-mg text-gray-500 mb-6 leading-relaxed max-w-xl text-center"
+              className="text-mg text-gray-500 mb-6 leading-relaxed max-w-full text-center"
             >
               A soft-hearted companion that listens, comforts, and helps you find calm in the chaos 💜🫶🏼
             </motion.p>
@@ -242,7 +242,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1 }}
-              className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 max-w-3xl mb-6"
+              className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 max-w-full mb-6"
             >
               {Object.entries(cuddleAttributes).map(([id, cuddle]) => (
                 <motion.div
