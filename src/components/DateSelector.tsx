@@ -97,7 +97,7 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
               onClick={() => onDateSelect(entry.date)}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex flex-col items-center justify-center transition-colors relative
+              className={`flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex flex-col items-center justify-center transition-colors
                 ${isSelected 
                   ? 'bg-primary text-white' 
                   : entry.hasEntry 
@@ -107,23 +107,6 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
             >
               <span className="text-xl sm:text-2xl font-semibold">{day}</span>
               <span className="text-xs sm:text-sm">{month}</span>
-              {entry.hasEntry && (
-                <svg
-                  className={`w-4 h-4 absolute top-1 right-1 ${
-                    isSelected ? 'text-white' : 'text-primary'
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              )}
             </motion.button>
           );
         })}
