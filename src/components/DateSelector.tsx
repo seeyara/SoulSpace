@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import { format, addDays, subDays } from 'date-fns';
 
 interface DateSelectorProps {
   onDateSelect: (date: string) => void;
@@ -18,18 +19,18 @@ interface JournalEntry {
 export default function DateSelector({ onDateSelect, selectedDate }: DateSelectorProps) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [startDate, setStartDate] = useState(new Date());
 
   useEffect(() => {
     const fetchEntries = async () => {
       try {
-        const today = new Date();
-        const dates = Array.from({ length: 5 }, (_, i) => {
-          const date = new Date(today);
-          date.setDate(date.getDate() - 2 + i);
-          return date.toISOString().split('T')[0];
+        // Generate 7 dates centered around startDate
+        const dates = Array.from({ length: 7 }, (_, i) => {
+          const date = addDays(startDate, i - 3);
+          return format(date, 'yyyy-MM-dd');
         });
 
-        const { data: entries, error } = await supabase
+        const { data: chatEntries, error } = await supabase
           .from('chats')
           .select('date')
           .in('date', dates);
@@ -39,7 +40,7 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
           return;
         }
 
-        const entryMap = new Set(entries.map(entry => entry.date));
+        const entryMap = new Set(chatEntries?.map(entry => entry.date) || []);
         const entriesWithFlags = dates.map(date => ({
           date,
           hasEntry: entryMap.has(date)
@@ -54,14 +55,14 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
     };
 
     fetchEntries();
-  }, []);
+  }, [startDate]);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return {
-      day: date.getDate(),
-      month: date.toLocaleString('default', { month: 'short' })
-    };
+  const handlePrevious = () => {
+    setStartDate(prev => subDays(prev, 7));
+  };
+
+  const handleNext = () => {
+    setStartDate(prev => addDays(prev, 7));
   };
 
   if (loading) {
@@ -76,20 +77,16 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
     <div className="relative flex items-center justify-center px-2 sm:px-4">
       <button 
         className="p-2 rounded-full hover:bg-primary/10 transition-colors"
-        onClick={() => {
-          const firstDate = new Date(entries[0].date);
-          firstDate.setDate(firstDate.getDate() - 1);
-          onDateSelect(firstDate.toISOString().split('T')[0]);
-        }}
+        onClick={handlePrevious}
       >
         <ChevronLeftIcon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
       </button>
 
       <div className="flex space-x-2 sm:space-x-4 px-2 sm:px-4">
         {entries.map((entry) => {
-          const { day, month } = formatDate(entry.date);
+          const date = new Date(entry.date);
           const isSelected = selectedDate === entry.date;
-          const isToday = new Date(entry.date).toDateString() === new Date().toDateString();
+          const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
           
           return (
             <motion.button
@@ -105,8 +102,12 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
                     : 'bg-primary/5 text-primary/50'}
                 ${isToday ? 'ring-2 ring-primary' : ''}`}
             >
-              <span className="text-xl sm:text-2xl font-semibold">{day}</span>
-              <span className="text-xs sm:text-sm">{month}</span>
+              <span className="text-xl sm:text-2xl font-semibold">
+                {format(date, 'd')}
+              </span>
+              <span className="text-xs sm:text-sm">
+                {format(date, 'MMM')}
+              </span>
             </motion.button>
           );
         })}
@@ -114,11 +115,7 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
 
       <button 
         className="p-2 rounded-full hover:bg-primary/10 transition-colors"
-        onClick={() => {
-          const lastDate = new Date(entries[entries.length - 1].date);
-          lastDate.setDate(lastDate.getDate() + 1);
-          onDateSelect(lastDate.toISOString().split('T')[0]);
-        }}
+        onClick={handleNext}
       >
         <ChevronRightIcon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
       </button>

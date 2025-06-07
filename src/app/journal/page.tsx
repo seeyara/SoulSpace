@@ -291,7 +291,7 @@ function JournalContent() {
       if (shouldEnd) {
         setTimeout(() => {
           setShowStreakModal(true);
-        }, 3000);
+        }, 150000);
         return;
       }
 
@@ -414,7 +414,7 @@ function JournalContent() {
 
         setTimeout(() => {
           setShowStreakModal(true);
-        }, 3000);
+        }, 150000);
       } catch (error) {
         console.error('Error saving chat:', error);
       }
