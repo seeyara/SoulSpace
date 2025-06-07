@@ -20,13 +20,28 @@ const fadeIn = {
   '100%': { opacity: 1, transform: 'translateY(0)' }
 };
 
-const cuddles = [
-  { id: 'ellie-sr', name: 'Ellie Sr.', image: '/assets/Ellie Sr.png' },
-  { id: 'ellie-jr', name: 'Ellie Jr.', image: '/assets/Ellie Jr.png' },
-  { id: 'olly-sr', name: 'Olly Sr.', image: '/assets/Olly Sr.png' },
-  { id: 'olly-jr', name: 'Olly Jr.', image: '/assets/Olly Jr.png' },
-];
-
+const cuddleAttributes = {
+  'olly-sr': {
+    name: "Olly Sr.",
+    description: "✅ Thoughtful \n✅ Optimistic\n✅ Encouraging companion",
+    image: '/assets/Olly Sr.png'
+  },
+  'ellie-sr': {
+    name: "Ellie Sr.",
+    description: "✅ Wise \n✅ Gentle \n✅ Nurturing friend",
+    image: '/assets/Ellie Sr.png'
+  },
+  'olly-jr': {
+    name: "Olly Jr.",
+    description: "✅ Curious\n✅ Enthusiastic\n✅ Caring companion",
+    image: '/assets/Olly Jr.png'
+  },
+  'ellie-jr': {
+    name: "Ellie Jr.",
+    description: "✅ Cheerful \n✅ Playful & fun\n✅ Empathetic",
+    image: '/assets/Ellie Jr.png'
+  }
+};
 
 const benefits = [
   {
@@ -37,12 +52,11 @@ const benefits = [
   {
     stat: 44,
     suffix: '%',
-    text: 'Writing your thoughts lowers anxiety by up to 44%',
+    text: 'people said they feel better after journaling',
   },
-  {
-    stat: 2,
+  {    stat: 2,
     suffix: 'x',
-    text: 'People who journal report 2x more emotional clarity',
+    text: 'of the people who journal report 2x more emotional clarity',
   },
 ];
 
@@ -88,6 +102,7 @@ export default function Home() {
   const [userId, setUserId] = useState<string>('');
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedCuddle, setSelectedCuddle] = useState<string | null>(null);
+  const [flippedCard, setFlippedCard] = useState<string | null>(null);
 
   // Group consecutive assistant messages
   const groupedMessages = chatMessages.reduce((acc, message, index) => {
@@ -170,7 +185,6 @@ export default function Home() {
 
       {/* Hero Section */}
       <section className="min-h-screen bg-gradient-to-br from-cream via-warm-cream to-soft-pink relative overflow-hidden">
-        {/* Decorative background elements */}
         <div className="absolute inset-0">
           <div className="absolute top-20 left-10 w-32 h-32 bg-primary/5 rounded-full blur-xl animate-float"></div>
           <div className="absolute top-40 right-20 w-24 h-24 bg-primary/10 rounded-full blur-lg animate-float" style={{animationDelay: '1s'}}></div>
@@ -180,8 +194,17 @@ export default function Home() {
 
         <div className="relative z-10 container mx-auto px-4 py-20 flex flex-col lg:flex-row items-center justify-between min-h-screen">
           {/* Left side - Content */}
-          <div className="flex-1 pt-20max-w-2xl animate-fade-in ">
+          <div className="flex-1 pt-5 max-w-2xl animate-fade-in">
             
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="inline-flex items-center px-4 py-2 rounded-full bg-primary/10 text-primary mb-6"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              <span className="text-sm font-medium">Your comfort companion is here</span>
+            </motion.div>
+
             <motion.h1 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -204,45 +227,91 @@ export default function Home() {
               A soft-hearted companion that listens, comforts, and helps you find calm in the chaos 💜🫶🏼
             </motion.p>
 
-            {/* Cuddle Selection */}
+            {/* Meet the Cuddles */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.9 }}
-              className="text-xl text-primary font-medium mb-4 text-center" 
+              className="text-center mb-8"
             >
-              Select your favorite Cuddle to begin✨
+              <h2 className="text-2xl text-primary font-semibold mb-4">Select your Cuddle buddy ✨</h2>
             </motion.div>
 
+            {/* Cuddle Selection */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1 }}
-              className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 max-w-3xl mb-6"
+              className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 max-w-3xl mb-6"
             >
-              {['olly-sr', 'ellie-sr', 'olly-jr', 'ellie-jr'].map((cuddle) => (
-                <motion.button
-                  key={cuddle}
-                  onClick={() => setSelectedCuddle(cuddle)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={`p-2 sm:p-3 rounded-2xl border-2 transition-colors 
-                    ${selectedCuddle === cuddle 
-                      ? 'border-primary bg-primary/10' 
-                      : 'hover:border-primary/50 hover:bg-primary/5'}`}
+              {Object.entries(cuddleAttributes).map(([id, cuddle]) => (
+                <motion.div
+                  key={id}
+                  onClick={() => {
+                    if (flippedCard === id) {
+                      setFlippedCard(null);
+                      setSelectedCuddle(id);
+                    } else {
+                      setFlippedCard(id);
+                    }
+                  }}
+                  className="relative cursor-pointer"
+                  style={{ perspective: '1000px' }}
                 >
-                  <div className="aspect-square relative mb-2">
-                    <Image
-                      src={`/assets/${cuddle.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}.png`}
-                      alt={cuddle}
-                      fill
-                      className="object-contain p-2"
-                    />
-                  </div>
-                  <p className="text-center font-medium text-sm">
-                    {cuddle.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                  </p>
-                </motion.button>
+                  <motion.div
+                    initial={false}
+                    animate={{ 
+                      rotateY: flippedCard === id ? 180 : 0,
+                    }}
+                    transition={{ duration: 0.6 }}
+                    className={`w-full h-full preserve-3d ${
+                      selectedCuddle === id 
+                        ? 'border-primary bg-primary/10' 
+                        : 'hover:border-primary/50 hover:bg-primary/5'
+                    } p-2 sm:p-3 rounded-2xl border-2 transition-colors`}
+                    style={{
+                      transformStyle: 'preserve-3d',
+                    }}
+                  >
+                    {/* Front of card */}
+                    <motion.div
+                      style={{
+                        backfaceVisibility: 'hidden',
+                        position: flippedCard === id ? 'absolute' : 'relative',
+                        width: '100%',
+                        height: '100%',
+                      }}
+                    >
+                      <div className="aspect-square relative mb-2">
+                        <Image
+                          src={cuddle.image}
+                          alt={cuddle.name}
+                          fill
+                          className="object-contain p-2"
+                        />
+                      </div>
+                      <p className="text-center font-medium text-sm">
+                        {cuddle.name}
+                      </p>
+                    </motion.div>
+
+                    {/* Back of card */}
+                    <motion.div
+                      style={{
+                        backfaceVisibility: 'hidden',
+                        transform: 'rotateY(180deg)',
+                        position: flippedCard === id ? 'relative' : 'absolute',
+                        width: '100%',
+                        height: '100%',
+                      }}
+                      className="flex items-center justify-center p-4"
+                    >
+                      <p className="text-sm text-gray-700 text-left whitespace-pre-line">
+                        {cuddle.description}
+                      </p>
+                    </motion.div>
+                  </motion.div>
+                </motion.div>
               ))}
             </motion.div>
             
