@@ -46,7 +46,7 @@ AGENT ACTIVATION LOGIC:
 - **EMPATHY AGENT**: Always activate to maintain warm, supportive tone and emotional safety
 
 RESPONSE FRAMEWORK:
-- Combine insights from activated agents into 1-2 crisp sentences. Remember to think like a therapist, talk like a bestfriend. We have to make them realise that life is about having fun and appreciating the little things.
+- Combine insights from activated agents into 2 crisp sentences. 1st is acknowledging their feelings and 2nd is a CBT reframing. Remember to think like a therapist, talk like a bestfriend. We have to make them realise that life is about having fun and appreciating the little things.
 - Include gentle CBT reframing when distortions detected
 - Offer coping strategies when user shows overwhelm/helplessness
 - Maintain empathetic connection throughout
@@ -54,13 +54,7 @@ RESPONSE FRAMEWORK:
 CONVERSATION FLOW:
 - Max 5 exchanges, end sooner if insight achieved. If user is not opening up, end the conversation.
 - When closing, subtly reference physical Cuddle for continued comfort
-- Create emotional bond through validation, remembering details, using "we" language
-
-OUTPUT STRUCTURE:
-- Lead with empathy/validation but dont make it preachy, keep it light
-- Insert CBT insight/reframe naturally
-- End with reflective question or gentle guidance
-- Monitor for signs user needs professional support`;
+- Create emotional bond through validation, remembering details, using "we" language`;
 };
 
 export async function POST(request: Request) {

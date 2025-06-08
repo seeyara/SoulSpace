@@ -56,7 +56,7 @@ const benefits = [
   },
   {    stat: 2,
     suffix: 'x',
-    text: 'of the people who journal report 2x more emotional clarity',
+    text: 'of the people who journal report improved emotional clarity',
   },
 ];
 
@@ -102,7 +102,6 @@ export default function Home() {
   const [userId, setUserId] = useState<string>('');
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedCuddle, setSelectedCuddle] = useState<string | null>(null);
-  const [flippedCard, setFlippedCard] = useState<string | null>(null);
 
   // Group consecutive assistant messages
   const groupedMessages = chatMessages.reduce((acc, message, index) => {
@@ -248,69 +247,29 @@ export default function Home() {
                 <motion.div
                   key={id}
                   onClick={() => {
-                    if (flippedCard === id) {
-                      setFlippedCard(null);
-                      setSelectedCuddle(id);
-                    } else {
-                      setFlippedCard(id);
-                    }
+                    setSelectedCuddle(id);
                   }}
                   className="relative cursor-pointer"
-                  style={{ perspective: '1000px' }}
                 >
-                  <motion.div
-                    initial={false}
-                    animate={{ 
-                      rotateY: flippedCard === id ? 180 : 0,
-                    }}
-                    transition={{ duration: 0.6 }}
-                    className={`w-full h-full preserve-3d ${
+                  <div
+                    className={`w-full h-full ${
                       selectedCuddle === id 
                         ? 'border-primary bg-primary/10' 
                         : 'hover:border-primary/50 hover:bg-primary/5'
                     } p-2 sm:p-3 rounded-2xl border-2 transition-colors`}
-                    style={{
-                      transformStyle: 'preserve-3d',
-                    }}
                   >
-                    {/* Front of card */}
-                    <motion.div
-                      style={{
-                        backfaceVisibility: 'hidden',
-                        position: flippedCard === id ? 'absolute' : 'relative',
-                        width: '100%',
-                        height: '100%',
-                      }}
-                    >
-                      <div className="aspect-square relative mb-2">
-                        <Image
-                          src={cuddle.image}
-                          alt={cuddle.name}
-                          fill
-                          className="object-contain p-2"
-                        />
-                      </div>
-                      <p className="text-center font-medium text-sm">
-                        {cuddle.name}
-                      </p>
-                    </motion.div>
-
-                    {/* Back of card */}
-                    <motion.div
-                      style={{
-                        backfaceVisibility: 'hidden',
-                        transform: 'rotateY(180deg)',
-                        position: flippedCard === id ? 'relative' : 'absolute',
-                        width: '100%',
-                        height: '100%',
-                      }}
-                      className="flex items-center justify-center p-4"
-                    >
-                      <p className="text-sm text-gray-700 text-left whitespace-pre-line">
-                        {cuddle.description}
-                      </p>
-                    </motion.div>
-                  </motion.div>
+                    <div className="aspect-square relative mb-2">
+                      <Image
+                        src={cuddle.image}
+                        alt={cuddle.name}
+                        fill
+                        className="object-contain p-2"
+                      />
+                    </div>
+                    <p className="text-center font-medium text-sm">
+                      {cuddle.name}
+                    </p>
+                  </div>
                 </motion.div>
               ))}
             </motion.div>

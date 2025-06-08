@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import { format, addDays, subDays } from 'date-fns';
+import { format, addDays } from 'date-fns';
 
 interface DateSelectorProps {
   onDateSelect: (date: string) => void;
@@ -57,14 +56,6 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
     fetchEntries();
   }, [startDate]);
 
-  const handlePrevious = () => {
-    setStartDate(prev => subDays(prev, 7));
-  };
-
-  const handleNext = () => {
-    setStartDate(prev => addDays(prev, 7));
-  };
-
   if (loading) {
     return (
       <div className="flex justify-center items-center h-32">
@@ -74,15 +65,8 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
   }
 
   return (
-    <div className="relative flex items-center justify-center px-2 sm:px-4">
-      <button 
-        className="p-2 rounded-full hover:bg-primary/10 transition-colors"
-        onClick={handlePrevious}
-      >
-        <ChevronLeftIcon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-      </button>
-
-      <div className="flex space-x-2 sm:space-x-4 px-2 sm:px-4">
+    <div className="relative flex items-center justify-center">
+      <div className="flex overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory px-2 sm:px-4 space-x-2 sm:space-x-4 w-full">
         {entries.map((entry) => {
           const date = new Date(entry.date);
           const isSelected = selectedDate === entry.date;
@@ -94,7 +78,7 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
               onClick={() => onDateSelect(entry.date)}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex flex-col items-center justify-center transition-colors
+              className={`flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex flex-col items-center justify-center transition-colors snap-center
                 ${isSelected 
                   ? 'bg-primary text-white' 
                   : entry.hasEntry 
@@ -112,13 +96,6 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
           );
         })}
       </div>
-
-      <button 
-        className="p-2 rounded-full hover:bg-primary/10 transition-colors"
-        onClick={handleNext}
-      >
-        <ChevronRightIcon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-      </button>
     </div>
   );
 } 
