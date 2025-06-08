@@ -28,17 +28,14 @@ const cuddleAttributes = {
   },
   'ellie-sr': {
     name: "Ellie Sr.",
-    description: "✅ Wise \n✅ Gentle \n✅ Nurturing friend",
     image: '/assets/Ellie Sr.png'
   },
   'olly-jr': {
     name: "Olly Jr.",
-    description: "✅ Curious\n✅ Enthusiastic\n✅ Caring companion",
     image: '/assets/Olly Jr.png'
   },
   'ellie-jr': {
     name: "Ellie Jr.",
-    description: "✅ Cheerful \n✅ Playful & fun\n✅ Empathetic",
     image: '/assets/Ellie Jr.png'
   }
 };
