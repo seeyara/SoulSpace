@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
-import { format, addDays } from 'date-fns';
+import { format, addDays, subDays } from 'date-fns';
 
 interface DateSelectorProps {
   onDateSelect: (date: string) => void;
@@ -19,42 +19,82 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState(new Date());
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const updateDates = async (newStartDate: Date) => {
+    try {
+      // Generate 5 dates centered around startDate
+      const dates = Array.from({ length: 5 }, (_, i) => {
+        const date = addDays(newStartDate, i - 2);
+        return format(date, 'yyyy-MM-dd');
+      });
+
+      const { data: chatEntries, error } = await supabase
+        .from('chats')
+        .select('date')
+        .in('date', dates);
+
+      if (error) {
+        console.error('Error fetching entries:', error);
+        return;
+      }
+
+      const entryMap = new Set(chatEntries?.map(entry => entry.date) || []);
+      const entriesWithFlags = dates.map(date => ({
+        date,
+        hasEntry: entryMap.has(date)
+      }));
+
+      setEntries(entriesWithFlags);
+    } catch (error) {
+      console.error('Error in updateDates:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchEntries = async () => {
-      try {
-        // Generate 7 dates centered around startDate
-        const dates = Array.from({ length: 7 }, (_, i) => {
-          const date = addDays(startDate, i - 3);
-          return format(date, 'yyyy-MM-dd');
-        });
+    updateDates(new Date());
+  }, []);
 
-        const { data: chatEntries, error } = await supabase
-          .from('chats')
-          .select('date')
-          .in('date', dates);
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setStartX(e.pageX - (scrollContainerRef.current?.offsetLeft || 0));
+    setScrollLeft(scrollContainerRef.current?.scrollLeft || 0);
+  };
 
-        if (error) {
-          console.error('Error fetching entries:', error);
-          return;
-        }
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
 
-        const entryMap = new Set(chatEntries?.map(entry => entry.date) || []);
-        const entriesWithFlags = dates.map(date => ({
-          date,
-          hasEntry: entryMap.has(date)
-        }));
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    const x = e.pageX - (scrollContainerRef.current?.offsetLeft || 0);
+    const walk = (x - startX) * 2;
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollLeft = scrollLeft - walk;
+    }
+  };
 
-        setEntries(entriesWithFlags);
-      } catch (error) {
-        console.error('Error in fetchEntries:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEntries();
-  }, [startDate]);
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
+    
+    // If we're near the edges, load more dates
+    if (scrollLeft < 100) {
+      const newStartDate = subDays(startDate, 5);
+      setStartDate(newStartDate);
+      updateDates(newStartDate);
+    } else if (scrollLeft > scrollWidth - clientWidth - 100) {
+      const newStartDate = addDays(startDate, 5);
+      setStartDate(newStartDate);
+      updateDates(newStartDate);
+    }
+  };
 
   if (loading) {
     return (
@@ -66,7 +106,15 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
 
   return (
     <div className="relative flex items-center justify-center">
-      <div className="flex overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory px-2 sm:px-4 space-x-2 sm:space-x-4 w-full">
+      <div
+        ref={scrollContainerRef}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseUp}
+        onScroll={handleScroll}
+        className="flex overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory px-2 sm:px-4 space-x-2 sm:space-x-4 w-full"
+      >
         {entries.map((entry) => {
           const date = new Date(entry.date);
           const isSelected = selectedDate === entry.date;

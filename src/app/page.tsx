@@ -122,44 +122,34 @@ export default function Home() {
   }, []);
 
   const handleDateSelect = async (date: string) => {
-    try {
-      setSelectedDate(date);
-      
-      // Get stored user ID
-      const storedUserId = localStorage.getItem('soul_journal_user_id');
-      if (!storedUserId) {
-        // If no user ID, prompt them to start journaling first
-        return; // Don't open modal, they need to start journaling first
-      }
-
-      // Fetch chat messages using the API route
-      const response = await fetch(`/api/chat?userId=${storedUserId}&date=${date}`);
-      const { data } = await response.json();
-      
-      if (data?.messages) {
-        setChatMessages(data.messages);
-        if (data.cuddleId) {
-          setSelectedCuddle(data.cuddleId);
-        }
-        setIsHistoryModalOpen(true);
-      } else {
-        setChatMessages([]);
-        setIsHistoryModalOpen(true);
-      }
-    } catch (error) {
-      console.error('Error in handleDateSelect:', error);
-      setChatMessages([]);
-      setIsHistoryModalOpen(true);
+    setSelectedDate(date);
+    setIsHistoryModalOpen(true);
+    // Get stored user ID
+    const storedUserId = localStorage.getItem('soul_journal_user_id');
+    if (!storedUserId) {
+      // If no user ID, prompt them to start journaling first
+      return; // Don't open modal, they need to start journaling first
     }
+    const { data: chatData, error } = await supabase
+      .from('chats')
+      .select('messages')
+      .eq('date', date)
+      .eq('user_id', storedUserId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching chat history:', error);
+      setChatMessages([]);
+      return;
+    }
+
+    setChatMessages(chatData?.messages || []);
   };
 
-  const handleStartJournaling = async () => {
-    if (!selectedCuddle) return;
-    router.push(`/journal?cuddle=${selectedCuddle}`);
-  };
-
-  const startJournaling = () => {
-    handleStartJournaling();
+  const handleStartJournaling = () => {
+    // Default to Olly-sr if no cuddle is selected
+    const cuddle = selectedCuddle || 'olly-sr';
+    router.push(`/journal?cuddle=${cuddle}&date=${selectedDate}`);
   };
 
   return (
@@ -421,10 +411,10 @@ export default function Home() {
         date={selectedDate}
         messages={chatMessages}
         onStartJournaling={handleStartJournaling}
-        selectedCuddle={selectedCuddle ?? ''}
+        selectedCuddle={selectedCuddle || 'olly-sr'}
         cuddleName={selectedCuddle 
-          ? selectedCuddle.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-          : ''}
+          ? cuddleAttributes[selectedCuddle as keyof typeof cuddleAttributes].name
+          : cuddleAttributes['olly-sr'].name}
       />
     </main>
   );

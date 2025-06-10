@@ -175,7 +175,7 @@ export default function Account() {
 
   const handleStartJournaling = () => {
     if (selectedDate) {
-      router.push(`/journal?cuddle=${selectedCuddle}`);
+      router.push(`/journal?cuddle=${selectedCuddle}&date=${selectedDate}`);
     }
   };
 

@@ -17,6 +17,7 @@ function JournalContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const selectedCuddle = (searchParams.get('cuddle') || 'ellie-sr') as CuddleId;
+  const selectedDate = searchParams.get('date') || format(new Date(), 'yyyy-MM-dd');
   const [currentPrompt, setCurrentPrompt] = useState<string>('');
   const [isTyping, setIsTyping] = useState(true);
   const [userResponse, setUserResponse] = useState('');
@@ -135,10 +136,8 @@ function JournalContent() {
         return;
       }
 
-      const today = format(new Date(), 'yyyy-MM-dd');
-
       try {
-        const response = await fetch(`/api/chat?userId=${storedUserId}&date=${today}&page=1`);
+        const response = await fetch(`/api/chat?userId=${storedUserId}&date=${selectedDate}&page=1`);
         const { data } = await response.json();
 
         if (data?.messages && data.messages.length > 0) {
@@ -206,7 +205,7 @@ function JournalContent() {
     };
 
     fetchChatHistory();
-  }, [selectedCuddle]);
+  }, [selectedCuddle, selectedDate]);
 
   useEffect(() => {
     // Load ongoing conversation from localStorage if exists
