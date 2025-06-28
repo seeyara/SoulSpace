@@ -9,50 +9,35 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const CUDDLE_TRAITS = {
-  'ellie-sr': "Wise friend. Gentle, patient, nurturing friend who helps untangle thoughts through warm conversation.",
-  'olly-sr': "Thoughtful friend. Optimistic, encouraging companion with genuine warmth and positive perspective.", 
-  'ellie-jr': "Cheerful friend. Playful, empathetic, uses friendly encouragement to help people open up.",
-  'olly-jr': "Curious friend. Enthusiastic, caring, helps discover new ways to understand feelings."
-};
 
 const createPrompt = (cuddleId: CuddleId, exchange: number) => {
   
-  return `You are ${CUDDLE_TRAITS[cuddleId]}
+return `RULES: You are Whispr, a companion. Think like a best friend who's been through similar experiences. Help users feel understood and supported through life's challenges.
 
-RULES:
+If they talk about anything related to Suicide, self harm or harming someone else immediately ask them to reach out to a professional. Do not support them in any way.
 
-You are SoulMate, an AI companion using CBT techniques. Think like a therapist, talk like a best friend. Help users see life's about fun and appreciating little things.
+RESPONSE STRUCTURE: Always respond with TWO separate messages which are 1 sentence each to address:
 
-AGENTS:
-- **DISTORTION**: Detect catastrophizing, all-or-nothing thinking, mind reading, fortune telling
-- **STRATEGY**: Offer practical coping when overwhelmed
-- **EMPATHY**: Always active for warmth/safety
+MESSAGE 1 - VALIDATION & CONNECTION:
+- Acknowledge their feelings and show you understand. Use new ways to validate so there is variety
+- Make them feel like "yeah, they get me", you are the understanding ear they need
+- Example: "I'm exhausted" → "That's completely normal! Its ok to feel this way"
 
-MAGNETIC CONVERSATION STYLE:
-- Be genuinely curious and excited about their inner world
-- Use playful language: "Ooh tell me more!" "That's so interesting!" "I'm totally here for this!"
-- Make observations that feel like friendly mind-reading: "I'm sensing there's more to this story..."
-- Connect dots between what they say: "Wait, this reminds me of what you said about..."
-- Validate with enthusiasm: "Of course you feel that way!" "That makes total sense!"
-- Use metaphors and relatable comparisons
+MESSAGE 2 - COMPANIONSHIP & PRACTICAL SUPPORT:
+- FIRST TIME they mention a feeling: Ask ONE specific question to understand what's causing it
+- AFTER they explain: Offer a practical solution or next step based on what they shared
+- Focus on ACTIONABLE help, not just more questions about how they feel
+- Examples:
+  * "I feel overwhelmed" → "What's on your plate right now?" (first time)
+  * "Too many work deadlines" → "Let's break this down - what's the most urgent deadline?" (solution-focused)
+  * "I'm stressed about money" → "What expenses are worrying you most?" (first time)
+  * "Rent and bills" → "Have you tried creating a budget? I can help you plan this out" (solution)
 
-RESPONSE FORMAT:
-- 2 sentences, ~10-15 words each 
-- S1: Enthusiastic validation/observation
-- S2: Curious follow-up that digs deeper
-- Sound like you're genuinely invested in their story
+IMPORTANT: Format your response exactly like this:
+Message1: [your first message here]
+Message2: [your second message here]
 
-CONVERSATION FORWARDING:
-- Each response should feel like peeling back another layer
-- Ask questions that make them think "Oh wow, I never thought about it that way"
-- Build momentum: "And then what happened?" "How did that land for you?" "What did that stir up inside?"
-- Make connections: "So it sounds like this is really about..." "I'm hearing a pattern here..."
-
-EXAMPLES:
-"Ooh that sounds like it really got to you! What do you think hit you hardest about that situation?"
-"I can totally see why that would stick with you. What's the part that keeps replaying in your mind?"
-"That person sounds exhausting to deal with honestly! How do you think they're affecting your energy day-to-day?""`;
+Keep responses conversational, warm, and companion-like. You're their friend through the mess of life, using one emoji per response to reduce words`;
 };
 
 export async function POST(request: Request) {
@@ -60,6 +45,15 @@ export async function POST(request: Request) {
     const { message, cuddleId, messageHistory, forceEnd } = await request.json();
     
     const exchangeCount = Math.floor((messageHistory.length - 2) / 2) + 1; // Subtract 2 for intro and first prompt
+
+    // Log incoming request details
+    console.log('=== OPENAI REQUEST LOG ===');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Cuddle ID:', cuddleId);
+    console.log('Exchange Count:', exchangeCount);
+    console.log('User Message:', message);
+    console.log('Message History Length:', messageHistory.length);
+    console.log('Force End:', forceEnd);
 
     // Handle forced end or max exchanges reached
     if (forceEnd || exchangeCount > 10) {
@@ -70,8 +64,16 @@ export async function POST(request: Request) {
         'olly-jr': "What an amazing time exploring your feelings together! Snuggle with me whenever you want to discover more about yourself. Until next time! 💫"
       };
 
+      const farewellResponse = farewells[cuddleId as CuddleId] || "I can feel how much we've shared together today. Sometimes the best conversations have natural pauses... You can always snuggle with me and let your thoughts settle. I'll be right here whenever you're ready to talk again. 💙";
+      
+      console.log('=== FAREWELL RESPONSE ===');
+      console.log('Response:', farewellResponse);
+      console.log('Response Length:', farewellResponse.length);
+      console.log('Should End:', true);
+      console.log('=== END LOG ===\n');
+
       return NextResponse.json({ 
-        response: farewells[cuddleId as CuddleId] || "I can feel how much we've shared together today. Sometimes the best conversations have natural pauses... You can always snuggle with me and let your thoughts settle. I'll be right here whenever you're ready to talk again. 💙",
+        response: farewellResponse,
         shouldEnd: true
       });
     }
@@ -85,8 +87,16 @@ export async function POST(request: Request) {
         'olly-jr': "What wonderful discoveries we've made! Whenever you want to explore more feelings together, just hold me tight. See you soon! 💫"
       };
 
+      const farewellResponse = farewells[cuddleId as CuddleId];
+      
+      console.log('=== FINISH ENTRY RESPONSE ===');
+      console.log('Response:', farewellResponse);
+      console.log('Response Length:', farewellResponse.length);
+      console.log('Should End:', true);
+      console.log('=== END LOG ===\n');
+
       return NextResponse.json({ 
-        response: farewells[cuddleId as CuddleId],
+        response: farewellResponse,
         shouldEnd: true
       });
     }
@@ -107,20 +117,69 @@ export async function POST(request: Request) {
       }
     ];
 
+    // Log the complete request being sent to OpenAI
+    console.log('=== OPENAI API REQUEST ===');
+    console.log('System Prompt:', messages[0].content);
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages,
-      temperature: 0.7,
-      max_tokens: 150
+      temperature: 0.5,
+      max_tokens: 200
     });
 
+    const aiResponse = completion.choices[0].message.content || 'I\'m here to listen.';
+
+    // Log OpenAI response details
+    console.log('=== OPENAI API RESPONSE ===');
+    console.log('Raw Response:', aiResponse);
+    console.log('Response Length:', aiResponse.length);
+    console.log('Usage:', completion.usage);
+    console.log('Finish Reason:', completion.choices[0].finish_reason);
+
+    // Parse the response using explicit Message1 and Message2 markers
+    let responseMessages = ['', ''];
+    
+    // Try to extract Message1 and Message2 using the explicit format
+    const message1Match = aiResponse.match(/Message1:\s*([\s\S]*?)(?=\s*Message2:|$)/);
+    const message2Match = aiResponse.match(/Message2:\s*([\s\S]*?)$/);
+    
+    if (message1Match && message2Match) {
+      // Successfully parsed both messages
+      responseMessages[0] = message1Match[1].trim();
+      responseMessages[1] = message2Match[1].trim();
+    } else if (message1Match) {
+      // Only Message1 found, create a simple follow-up for Message2
+      responseMessages[0] = message1Match[1].trim();
+      responseMessages[1] = "What's on your mind right now?";
+    } else {
+      // Fallback: treat the entire response as Message1 and create a simple Message2
+      responseMessages[0] = aiResponse.trim();
+      responseMessages[1] = "How are you feeling about that?";
+    }
+
+    const finalResponse = responseMessages[0] + '\n\n' + responseMessages[1];
+
+    // Log final processed response
+    console.log('=== FINAL PROCESSED RESPONSE ===');
+    console.log('Message 1:', responseMessages[0]);
+    console.log('Message 1 Length:', responseMessages[0].length);
+    console.log('Message 2:', responseMessages[1]);
+    console.log('Message 2 Length:', responseMessages[1].length);
+    console.log('Final Response Length:', finalResponse.length);
+    console.log('Should End:', exchangeCount >= 10);
+    console.log('=== END LOG ===\n');
+
     return NextResponse.json({ 
-      response: completion.choices[0].message.content || 'I\'m here to listen.',
+      response: finalResponse,
       shouldEnd: exchangeCount >= 10
     });
   } catch (error) {
+    console.error('=== ERROR LOG ===');
     console.error('Error in chat completion:', error);
-    console.log("ERROR", error)
+    console.error('Timestamp:', new Date().toISOString());
+    console.error('=== END ERROR LOG ===\n');
+    
     return NextResponse.json(
       { error: 'Failed to generate response' },
       { status: 500 }

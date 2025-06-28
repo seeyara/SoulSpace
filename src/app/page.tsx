@@ -23,7 +23,6 @@ const fadeIn = {
 const cuddleAttributes = {
   'olly-sr': {
     name: "Olly Sr.",
-    description: "✅ Thoughtful \n✅ Optimistic\n✅ Encouraging companion",
     image: '/assets/Olly Sr.png'
   },
   'ellie-sr': {

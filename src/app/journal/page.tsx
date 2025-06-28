@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { cuddleData } from '@/data/cuddles';
 import type { CuddleId } from '@/types/cuddles';
 import StreakModal from '@/components/StreakModal';
+import PrivacyModal from '@/components/PrivacyModal';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import axios from 'axios';
@@ -25,6 +26,7 @@ function JournalContent() {
   const [userId, setUserId] = useState<string>('');
   const [showInput, setShowInput] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [usedPrompts, setUsedPrompts] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isWelcomeBack, setIsWelcomeBack] = useState(false);
@@ -79,6 +81,9 @@ function JournalContent() {
             localStorage.setItem('soul_journal_user_id', newUserId);
             setUserId(newUserId);
             setUserName('Username');
+            
+            // Show privacy modal for new users
+            setShowPrivacyModal(true);
           }
         } catch (error) {
           console.error('Error in user creation:', error);
@@ -119,20 +124,7 @@ function JournalContent() {
     const fetchChatHistory = async () => {
       const storedUserId = localStorage.getItem('soul_journal_user_id');
       if (!storedUserId) {
-        // Initialize new conversation if no user ID
-        const cuddle = cuddleData.cuddles[selectedCuddle];
-        setIsTyping(true);
-        setTimeout(() => {
-          setMessages([{
-            role: 'assistant',
-            content: cuddle.intro
-          }, {
-            role: 'assistant',
-            content: cuddle.prompts[0]
-          }]);
-          setIsTyping(false);
-          setShowInput(true);
-        }, 1000);
+        // Don't start conversation yet if no user ID (wait for privacy modal)
         return;
       }
 
@@ -205,7 +197,47 @@ function JournalContent() {
     };
 
     fetchChatHistory();
-  }, [selectedCuddle, selectedDate]);
+  }, [selectedCuddle, selectedDate, userId]);
+
+  // Start conversation after privacy modal is closed for new users
+  useEffect(() => {
+    if (userId && !showPrivacyModal && messages.length === 0) {
+      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      if (storedUserId) {
+        // Check if this is a new user (has temp_session_id)
+        const checkIfNewUser = async () => {
+          try {
+            const { data } = await supabase
+              .from('users')
+              .select('temp_session_id')
+              .eq('id', storedUserId)
+              .single();
+            
+            if (data?.temp_session_id) {
+              // This is a new user, start the conversation
+              const cuddle = cuddleData.cuddles[selectedCuddle];
+              setIsTyping(true);
+              setTimeout(() => {
+                setMessages([{
+                  role: 'assistant',
+                  content: cuddle.intro
+                }, {
+                  role: 'assistant',
+                  content: cuddle.prompts[0]
+                }]);
+                setIsTyping(false);
+                setShowInput(true);
+              }, 1000);
+            }
+          } catch (error) {
+            console.error('Error checking if new user:', error);
+          }
+        };
+        
+        checkIfNewUser();
+      }
+    }
+  }, [userId, showPrivacyModal, selectedCuddle]);
 
   useEffect(() => {
     // Load ongoing conversation from localStorage if exists
@@ -248,17 +280,6 @@ function JournalContent() {
             'Content-Type': 'application/json',
           },
          })
-        //   {
-        //   method: 'POST',
-        //   headers: {
-        //     'Content-Type': 'application/json',
-        //   },
-        //   body: JSON.stringify({
-        //     message: userMessage.content,
-        //     cuddleId: selectedCuddle,
-        //     messageHistory: messages
-        //   }),
-        // }
       
       } catch (error) {
         console.error('Error:', error);
@@ -272,29 +293,66 @@ function JournalContent() {
 
       const { response: aiResponse, shouldEnd } = response.data;
 
-      const assistantMessage = {
+      // Split the AI response into two messages
+      const responseParts = aiResponse.split('\n\n');
+      const firstMessage = responseParts[0] || aiResponse;
+      const secondMessage = responseParts[1] || '';
+
+      // Add the first message immediately
+      const firstAssistantMessage = {
         role: 'assistant' as const,
-        content: aiResponse
+        content: firstMessage
       };
 
-      const updatedMessages = [...messages, userMessage, assistantMessage];
+      const updatedMessagesWithFirst = [...messages, userMessage, firstAssistantMessage];
       setIsTyping(false);
-      setMessages(updatedMessages);
+      setMessages(updatedMessagesWithFirst);
 
-      // Save to localStorage instead of database
-      localStorage.setItem('ongoing_journal_conversation', JSON.stringify({
-        messages: updatedMessages,
-        cuddle: selectedCuddle
-      }));
-
-      if (shouldEnd) {
+      // Add the second message after a short delay for natural flow
+      if (secondMessage) {
         setTimeout(() => {
-          setShowStreakModal(true);
-        }, 150000);
-        return;
-      }
+          setIsTyping(true);
+          setTimeout(() => {
+            const secondAssistantMessage = {
+              role: 'assistant' as const,
+              content: secondMessage
+            };
+            const finalMessages = [...updatedMessagesWithFirst, secondAssistantMessage];
+            setIsTyping(false);
+            setMessages(finalMessages);
 
-      setShowInput(true);
+            // Save to localStorage
+            localStorage.setItem('ongoing_journal_conversation', JSON.stringify({
+              messages: finalMessages,
+              cuddle: selectedCuddle
+            }));
+
+            if (shouldEnd) {
+              setTimeout(() => {
+                setShowStreakModal(true);
+              }, 150000);
+              return;
+            }
+
+            setShowInput(true);
+          }, 1000); // 1 second typing delay for second message
+        }, 500); // 0.5 second delay before starting second message
+      } else {
+        // If no second message, just save and continue
+        localStorage.setItem('ongoing_journal_conversation', JSON.stringify({
+          messages: updatedMessagesWithFirst,
+          cuddle: selectedCuddle
+        }));
+
+        if (shouldEnd) {
+          setTimeout(() => {
+            setShowStreakModal(true);
+          }, 150000);
+          return;
+        }
+
+        setShowInput(true);
+      }
     } catch (error) {
       console.error('Error in handleSubmit:', error);
       setIsTyping(false);
@@ -453,14 +511,39 @@ function JournalContent() {
 
       const { response: aiResponse } = await response.json();
 
-      const assistantMessage = {
+      // Split the AI response into two messages
+      const responseParts = aiResponse.split('\n\n');
+      const firstMessage = responseParts[0] || aiResponse;
+      const secondMessage = responseParts[1] || '';
+
+      // Add the first message immediately
+      const firstAssistantMessage = {
         role: 'assistant' as const,
-        content: aiResponse
+        content: firstMessage
       };
 
+      const updatedMessagesWithFirst = [...messages, continueMessage, firstAssistantMessage];
       setIsTyping(false);
-      setMessages(prev => [...prev, assistantMessage]);
-      setShowInput(true);
+      setMessages(updatedMessagesWithFirst);
+
+      // Add the second message after a short delay for natural flow
+      if (secondMessage) {
+        setTimeout(() => {
+          setIsTyping(true);
+          setTimeout(() => {
+            const secondAssistantMessage = {
+              role: 'assistant' as const,
+              content: secondMessage
+            };
+            const finalMessages = [...updatedMessagesWithFirst, secondAssistantMessage];
+            setIsTyping(false);
+            setMessages(finalMessages);
+            setShowInput(true);
+          }, 1000); // 1 second typing delay for second message
+        }, 500); // 0.5 second delay before starting second message
+      } else {
+        setShowInput(true);
+      }
     } catch (error) {
       console.error('Error in handleContinue:', error);
       setIsTyping(false);
@@ -729,6 +812,11 @@ function JournalContent() {
         onClose={handleCloseStreakModal}
         date={format(new Date(), 'MMMM d, yyyy')}
         userId={userId}
+      />
+
+      <PrivacyModal
+        isOpen={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
       />
     </main>
   );
