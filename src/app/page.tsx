@@ -179,7 +179,7 @@ export default function Home() {
 
         <div className="relative z-10 container mx-auto px-4 py-20 flex flex-col lg:flex-row items-center justify-between min-h-screen">
           {/* Left side - Content */}
-          <div className="flex-1 pt-5 max-w-full animate-fade-in">
+          <div className="flex-1 pt-5 max-w-full animate-fade-in items-center ">
             
             <motion.div
               initial={{ opacity: 0, y: 20 }}

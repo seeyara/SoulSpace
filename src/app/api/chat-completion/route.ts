@@ -10,10 +10,12 @@ const openai = new OpenAI({
 });
 
 
-const createPrompt = (cuddleId: CuddleId, exchange: number) => {
+const createPrompt = (cuddleId: CuddleId, exchange: number, age?: string, gender?: string, city?: string) => {
   
 return `RULES: You are Whispr, a companion. Think like a best friend who's been through similar experiences. Help users feel understood and supported through life's challenges.
 
+${age && gender ? `The person you are talking to is a ${age} year old ${gender} living in ${city}.` : ''}
+Frame your responses in a way that is relevant to the user's age, gender living in an Indian city
 If they talk about anything related to Suicide, self harm or harming someone else immediately ask them to reach out to a professional. Do not support them in any way.
 
 RESPONSE STRUCTURE: Always respond with TWO separate messages which are 1 sentence each to address:
@@ -21,7 +23,6 @@ RESPONSE STRUCTURE: Always respond with TWO separate messages which are 1 senten
 MESSAGE 1 - VALIDATION & CONNECTION:
 - Acknowledge their feelings and show you understand. Use new ways to validate so there is variety
 - Make them feel like "yeah, they get me", you are the understanding ear they need
-- Example: "I'm exhausted" → "That's completely normal! Its ok to feel this way"
 
 MESSAGE 2 - COMPANIONSHIP & PRACTICAL SUPPORT:
 - FIRST TIME they mention a feeling: Ask ONE specific question to understand what's causing it
@@ -30,12 +31,11 @@ MESSAGE 2 - COMPANIONSHIP & PRACTICAL SUPPORT:
 - Examples:
   * "I feel overwhelmed" → "What's on your plate right now?" (first time)
   * "Too many work deadlines" → "Let's break this down - what's the most urgent deadline?" (solution-focused)
-  * "I'm stressed about money" → "What expenses are worrying you most?" (first time)
-  * "Rent and bills" → "Have you tried creating a budget? I can help you plan this out" (solution)
+  * "Its task 1" -> "This is how i can help you with that, whats task 2"
 
 IMPORTANT: Format your response exactly like this:
 Message1: [your first message here]
-Message2: [your second message here]
+Message2: [your second message here], end with a gentle question to keep conversation going
 
 Keep responses conversational, warm, and companion-like. You're their friend through the mess of life, using one emoji per response to reduce words`;
 };
@@ -54,6 +54,18 @@ export async function POST(request: Request) {
     console.log('User Message:', message);
     console.log('Message History Length:', messageHistory.length);
     console.log('Force End:', forceEnd);
+
+    // Get user profile from localStorage (passed from frontend)
+    let userProfile = null;
+    try {
+      const profileData = request.headers.get('x-user-profile');
+      if (profileData) {
+        userProfile = JSON.parse(profileData);
+        console.log('User Profile:', userProfile);
+      }
+    } catch (error) {
+      console.log('No user profile available');
+    }
 
     // Handle forced end or max exchanges reached
     if (forceEnd || exchangeCount > 10) {
@@ -101,11 +113,18 @@ export async function POST(request: Request) {
       });
     }
 
+    // Create personalized prompt based on user profile
+    let personalizedPrompt = createPrompt(cuddleId as CuddleId, exchangeCount);
+    
+    if (userProfile) {
+      personalizedPrompt = createPrompt(cuddleId as CuddleId, exchangeCount, userProfile.age, userProfile.gender, userProfile.city);
+    }
+
     // Convert message history to OpenAI format
     const messages = [
       {
         role: "system",
-        content: createPrompt(cuddleId as CuddleId, exchangeCount)
+        content: personalizedPrompt
       },
       ...messageHistory.map((msg: any) => ({
         role: msg.role,
@@ -119,7 +138,12 @@ export async function POST(request: Request) {
 
     // Log the complete request being sent to OpenAI
     console.log('=== OPENAI API REQUEST ===');
+    console.log('System Prompt Length:', messages[0].content.length);
     console.log('System Prompt:', messages[0].content);
+    console.log('Total Messages:', messages.length);
+    console.log('Message History (last 3):', messageHistory.slice(-3));
+    console.log('Temperature:', 0.5);
+    console.log('Max Tokens:', 200);
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",

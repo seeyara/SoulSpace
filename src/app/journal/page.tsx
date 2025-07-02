@@ -36,6 +36,9 @@ function JournalContent() {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [page, setPage] = useState(1);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const [journalingMode, setJournalingMode] = useState<'guided' | 'free-form' | null>(null);
+  const [freeFormContent, setFreeFormContent] = useState('');
+  const [showSuggestedReplies, setShowSuggestedReplies] = useState(false);
 
   // Initialize user and start intro message
   useEffect(() => {
@@ -162,42 +165,47 @@ function JournalContent() {
             setShowInput(true);
           }
         } else {
-          // Start a new conversation if no chat history
+          // Check if this is a new user (has temp_session_id) before starting conversation
+          const { data: userData } = await supabase
+            .from('users')
+            .select('temp_session_id')
+            .eq('id', storedUserId)
+            .single();
+          
+          // Only start conversation if user is not new (no temp_session_id) or privacy modal is closed
+          if (!userData?.temp_session_id || !showPrivacyModal) {
+            const cuddle = cuddleData.cuddles[selectedCuddle];
+            setIsTyping(true);
+            setTimeout(() => {
+              setMessages([{
+                role: 'assistant',
+                content: `${cuddle.intro}\n\nHow would you like to journal today?`
+              }]);
+              setIsTyping(false);
+              setShowSuggestedReplies(true);
+            }, 1000);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching chat history:', error);
+        // Only start a new conversation on error if privacy modal is closed
+        if (!showPrivacyModal) {
           const cuddle = cuddleData.cuddles[selectedCuddle];
           setIsTyping(true);
           setTimeout(() => {
             setMessages([{
               role: 'assistant',
-              content: cuddle.intro
-            }, {
-              role: 'assistant',
-              content: cuddle.prompts[0]
+              content: `${cuddle.intro}\n\nHow would you like to journal today?`
             }]);
             setIsTyping(false);
-            setShowInput(true);
+            setShowSuggestedReplies(true);
           }, 1000);
         }
-      } catch (error) {
-        console.error('Error fetching chat history:', error);
-        // Start a new conversation on error
-        const cuddle = cuddleData.cuddles[selectedCuddle];
-        setIsTyping(true);
-        setTimeout(() => {
-          setMessages([{
-            role: 'assistant',
-            content: cuddle.intro
-          }, {
-            role: 'assistant',
-            content: cuddle.prompts[0]
-          }]);
-          setIsTyping(false);
-          setShowInput(true);
-        }, 1000);
       }
     };
 
     fetchChatHistory();
-  }, [selectedCuddle, selectedDate, userId]);
+  }, [selectedCuddle, selectedDate, userId, showPrivacyModal]);
 
   // Start conversation after privacy modal is closed for new users
   useEffect(() => {
@@ -220,13 +228,10 @@ function JournalContent() {
               setTimeout(() => {
                 setMessages([{
                   role: 'assistant',
-                  content: cuddle.intro
-                }, {
-                  role: 'assistant',
-                  content: cuddle.prompts[0]
+                  content: `${cuddle.intro}\n\nHow would you like to journal today?`
                 }]);
                 setIsTyping(false);
-                setShowInput(true);
+                setShowSuggestedReplies(true);
               }, 1000);
             }
           } catch (error) {
@@ -247,6 +252,7 @@ function JournalContent() {
       if (cuddle === selectedCuddle) {
         setMessages(savedMessages);
         setShowInput(true);
+        setJournalingMode('guided'); // Assume guided mode for ongoing conversations
       }
     }
   }, [selectedCuddle]);
@@ -269,6 +275,10 @@ function JournalContent() {
     setIsTyping(true);
 
     try {
+      // Get user profile from localStorage
+      const userProfileData = localStorage.getItem('user_profile');
+      const userProfile = userProfileData ? JSON.parse(userProfileData) : null;
+
       let response;
       try {
          response = await axios.post('/api/chat-completion', {
@@ -278,6 +288,7 @@ function JournalContent() {
          },{
           headers: {
             'Content-Type': 'application/json',
+            'x-user-profile': userProfile ? JSON.stringify(userProfile) : ''
           },
          })
       
@@ -330,7 +341,7 @@ function JournalContent() {
             if (shouldEnd) {
               setTimeout(() => {
                 setShowStreakModal(true);
-              }, 150000);
+              }, 1500);
               return;
             }
 
@@ -347,7 +358,7 @@ function JournalContent() {
         if (shouldEnd) {
           setTimeout(() => {
             setShowStreakModal(true);
-          }, 150000);
+          }, 1500);
           return;
         }
 
@@ -361,6 +372,83 @@ function JournalContent() {
         role: 'assistant',
         content: "I'm having trouble responding right now. Could you try again?"
       }]);
+    }
+  };
+
+  const handleFreeFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!freeFormContent.trim()) return;
+
+    const storedUserId = localStorage.getItem('soul_journal_user_id');
+    if (!storedUserId) {
+      console.error('No user ID available');
+      router.push('/');
+      return;
+    }
+
+    try {
+      // Save free-form journal entry
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [{
+            role: 'user',
+            content: freeFormContent
+          }],
+          userId: storedUserId,
+          cuddleId: selectedCuddle
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save journal entry');
+      }
+
+      // Clear the form and show success message
+      setFreeFormContent('');
+      setShowInput(false);
+      setIsTyping(true);
+      
+      setTimeout(() => {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: "Thank you for sharing your thoughts with me. I've saved your journal entry. 💜\n\nHow would you like to journal today?"
+        }]);
+        setIsTyping(false);
+        setShowSuggestedReplies(true);
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error saving journal entry:', error);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: "I'm having trouble saving your entry right now. Could you try again?"
+      }]);
+      setShowInput(true);
+    }
+  };
+
+  const handleModeSelection = (mode: 'guided' | 'free-form') => {
+    setJournalingMode(mode);
+    setShowSuggestedReplies(false);
+    
+    if (mode === 'guided') {
+      // Show a prompt first for guided journaling
+      setIsTyping(true);
+      setTimeout(() => {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: "What's on your mind today?"
+        }]);
+        setIsTyping(false);
+        setShowInput(true);
+      }, 1000);
+    } else {
+      // Show free-form journaling interface immediately
+      setShowInput(true);
     }
   };
 
@@ -471,7 +559,7 @@ function JournalContent() {
 
         setTimeout(() => {
           setShowStreakModal(true);
-        }, 150000);
+        }, 1500);
       } catch (error) {
         console.error('Error saving chat:', error);
       }
@@ -539,15 +627,18 @@ function JournalContent() {
             setIsTyping(false);
             setMessages(finalMessages);
             setShowInput(true);
+            setJournalingMode('guided'); // Set guided mode for continued conversations
           }, 1000); // 1 second typing delay for second message
         }, 500); // 0.5 second delay before starting second message
       } else {
         setShowInput(true);
+        setJournalingMode('guided'); // Set guided mode for continued conversations
       }
     } catch (error) {
       console.error('Error in handleContinue:', error);
       setIsTyping(false);
       setShowInput(true);
+      setJournalingMode('guided'); // Set guided mode for continued conversations
     }
   };
 
@@ -711,6 +802,24 @@ function JournalContent() {
                           {getCuddleName(selectedCuddle)} 💭
                         </span>
                       )}
+                      {isLastAssistantMessage && showSuggestedReplies && !journalingMode && (
+                        <div className="mt-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleModeSelection('guided')}
+                              className="bg-primary text-white px-4 py-2 rounded-xl font-medium hover:bg-primary/90 transition-colors text-sm flex-1"
+                            >
+                              💬 Guided Journaling
+                            </button>
+                            <button
+                              onClick={() => handleModeSelection('free-form')}
+                              className="bg-primary text-white px-4 py-2 rounded-xl font-medium hover:bg-primary/90 transition-colors text-sm flex-1"
+                            >
+                              ✍️ Free Journaling
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 );
@@ -774,6 +883,34 @@ function JournalContent() {
                       Continue
                     </button>
                   </div>
+                ) : journalingMode === 'free-form' ? (
+                  <form onSubmit={handleFreeFormSubmit} className="space-y-4">
+                    <textarea
+                      value={freeFormContent}
+                      onChange={(e) => setFreeFormContent(e.target.value)}
+                      placeholder="Write down your thoughts or feelings or experiences that you'd like to reflect on..."
+                      rows={8}
+                      className="w-full p-6 rounded-2xl border-2 border-primary/20 focus:border-primary outline-none bg-white resize-none text-base"
+                    />
+                    <div className="flex justify-between items-center">
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleFinishEntry}
+                          className="text-primary/70 border-2 border-primary/20 px-4 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
+                        >
+                          End entry
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={!freeFormContent.trim()}
+                          className="bg-primary text-white px-6 py-2 rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                        >
+                          Save Entry
+                        </button>
+                      </div>
+                    </div>
+                  </form>
                 ) : (
                   <form onSubmit={handleSubmit} className="space-y-2">
                     <textarea
