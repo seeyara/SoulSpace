@@ -205,11 +205,11 @@ function JournalContent() {
     };
 
     fetchChatHistory();
-  }, [selectedCuddle, selectedDate, userId, showPrivacyModal]);
+  }, [selectedCuddle, selectedDate, userId]);
 
-  // Start conversation after privacy modal is closed for new users
+  // Separate effect to handle privacy modal state changes
   useEffect(() => {
-    if (userId && !showPrivacyModal && messages.length === 0) {
+    if (!showPrivacyModal && userId && messages.length === 0) {
       const storedUserId = localStorage.getItem('soul_journal_user_id');
       if (storedUserId) {
         // Check if this is a new user (has temp_session_id)
@@ -242,7 +242,7 @@ function JournalContent() {
         checkIfNewUser();
       }
     }
-  }, [userId, showPrivacyModal, selectedCuddle]);
+  }, [showPrivacyModal, userId, selectedCuddle]);
 
   useEffect(() => {
     // Load ongoing conversation from localStorage if exists
@@ -269,6 +269,8 @@ function JournalContent() {
     }
 
     const userMessage = { role: 'user' as const, content: userResponse.trim() };
+    
+    // Batch state updates to prevent multiple re-renders
     setMessages(prev => [...prev, userMessage]);
     setUserResponse('');
     setShowInput(false);
@@ -316,6 +318,8 @@ function JournalContent() {
       };
 
       const updatedMessagesWithFirst = [...messages, userMessage, firstAssistantMessage];
+      
+      // Batch state updates for first message
       setIsTyping(false);
       setMessages(updatedMessagesWithFirst);
 
@@ -329,6 +333,8 @@ function JournalContent() {
               content: secondMessage
             };
             const finalMessages = [...updatedMessagesWithFirst, secondAssistantMessage];
+            
+            // Batch state updates for final messages
             setIsTyping(false);
             setMessages(finalMessages);
 
@@ -366,6 +372,7 @@ function JournalContent() {
       }
     } catch (error) {
       console.error('Error in handleSubmit:', error);
+      // Batch error state updates
       setIsTyping(false);
       setShowInput(true);
       setMessages(prev => [...prev, {
@@ -407,7 +414,7 @@ function JournalContent() {
         throw new Error('Failed to save journal entry');
       }
 
-      // Clear the form and show success message
+      // Batch state updates to prevent multiple re-renders
       setFreeFormContent('');
       setShowInput(false);
       setIsTyping(true);
@@ -423,6 +430,7 @@ function JournalContent() {
 
     } catch (error) {
       console.error('Error saving journal entry:', error);
+      // Batch error state updates
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: "I'm having trouble saving your entry right now. Could you try again?"

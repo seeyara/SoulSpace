@@ -67,8 +67,8 @@ export async function POST(request: Request) {
       console.log('No user profile available');
     }
 
-    // Handle forced end or max exchanges reached
-    if (forceEnd || exchangeCount > 10) {
+    // Handle forced end only (removed max exchanges limit)
+    if (forceEnd) {
       const farewells = {
         'ellie-sr': "I can feel we've reached a meaningful place in our conversation. Remember, you can always hold me close as you let these thoughts settle. I'll be here whenever you need to untangle your mind again. 💜",
         'olly-sr': "Thank you for sharing your thoughts with me today. Hold onto the positives we've discovered, and remember I'm here whenever you want to find more silver linings together. 💙",
@@ -191,12 +191,12 @@ export async function POST(request: Request) {
     console.log('Message 2:', responseMessages[1]);
     console.log('Message 2 Length:', responseMessages[1].length);
     console.log('Final Response Length:', finalResponse.length);
-    console.log('Should End:', exchangeCount >= 10);
+    console.log('Should End:', false);
     console.log('=== END LOG ===\n');
 
     return NextResponse.json({ 
       response: finalResponse,
-      shouldEnd: exchangeCount >= 10
+      shouldEnd: false
     });
   } catch (error) {
     console.error('=== ERROR LOG ===');
