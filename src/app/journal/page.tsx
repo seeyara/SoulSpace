@@ -17,7 +17,7 @@ const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue our conve
 function JournalContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const selectedCuddle = (searchParams.get('cuddle') || 'ellie-sr') as CuddleId;
+  const selectedCuddle = (localStorage.getItem('soul_journal_cuddle_id') || searchParams.get('cuddle') || 'ellie-sr') as CuddleId;
   const selectedDate = searchParams.get('date') || format(new Date(), 'yyyy-MM-dd');
   const [currentPrompt, setCurrentPrompt] = useState<string>('');
   const [isTyping, setIsTyping] = useState(true);
@@ -174,32 +174,32 @@ function JournalContent() {
           
           // Only start conversation if user is not new (no temp_session_id) or privacy modal is closed
           if (!userData?.temp_session_id || !showPrivacyModal) {
-            const cuddle = cuddleData.cuddles[selectedCuddle];
-            setIsTyping(true);
-            setTimeout(() => {
-              setMessages([{
-                role: 'assistant',
+          const cuddle = cuddleData.cuddles[selectedCuddle];
+          setIsTyping(true);
+          setTimeout(() => {
+            setMessages([{
+              role: 'assistant',
                 content: `${cuddle.intro}\n\nHow would you like to journal today?`
-              }]);
-              setIsTyping(false);
+            }]);
+            setIsTyping(false);
               setShowSuggestedReplies(true);
-            }, 1000);
+          }, 1000);
           }
         }
       } catch (error) {
         console.error('Error fetching chat history:', error);
         // Only start a new conversation on error if privacy modal is closed
         if (!showPrivacyModal) {
-          const cuddle = cuddleData.cuddles[selectedCuddle];
-          setIsTyping(true);
-          setTimeout(() => {
-            setMessages([{
-              role: 'assistant',
+        const cuddle = cuddleData.cuddles[selectedCuddle];
+        setIsTyping(true);
+        setTimeout(() => {
+          setMessages([{
+            role: 'assistant',
               content: `${cuddle.intro}\n\nHow would you like to journal today?`
-            }]);
-            setIsTyping(false);
+          }]);
+          setIsTyping(false);
             setShowSuggestedReplies(true);
-          }, 1000);
+        }, 1000);
         }
       }
     };
@@ -495,6 +495,20 @@ function JournalContent() {
     return id.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 
+  const getDisplayCuddleName = (id: string) => {
+    // Check localStorage first for custom cuddle name
+    const customName = localStorage.getItem('soul_journal_cuddle_name');
+    const storedCuddleId = localStorage.getItem('soul_journal_cuddle_id');
+    
+    // If we have a custom name and it matches the current cuddle, use it
+    if (customName && storedCuddleId === id) {
+      return customName;
+    }
+    
+    // Otherwise, fall back to the generic name
+    return getCuddleName(id);
+  };
+
   const getCuddleImage = (id: string) => {
     switch (id) {
       case 'olly-sr':
@@ -731,13 +745,13 @@ function JournalContent() {
           <div className="flex items-center gap-2">
             <Image
               src={getCuddleImage(selectedCuddle)}
-              alt={getCuddleName(selectedCuddle)}
+              alt={getDisplayCuddleName(selectedCuddle)}
               width={32}
               height={32}
               className="h-8 w-8 rounded-full"
             />
             <span className="text-primary font-medium">
-              {getCuddleName(selectedCuddle)}
+              {getDisplayCuddleName(selectedCuddle)}
             </span>
           </div>
         </div>
@@ -807,7 +821,7 @@ function JournalContent() {
                       </div>
                       {isLastAssistantMessage && (
                         <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
-                          {getCuddleName(selectedCuddle)} 💭
+                          {getDisplayCuddleName(selectedCuddle)} 💭
                         </span>
                       )}
                       {isLastAssistantMessage && showSuggestedReplies && !journalingMode && (
@@ -862,7 +876,7 @@ function JournalContent() {
                     </div>
                   </div>
                   <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
-                    {getCuddleName(selectedCuddle)} is typing...
+                    {getDisplayCuddleName(selectedCuddle)} is typing...
                   </span>
                 </div>
               </motion.div>

@@ -3,30 +3,39 @@ import { supabase } from '@/lib/supabase';
 
 export async function POST(request: Request) {
   try {
-    const { userId, name } = await request.json();
+    const { userId, name, cuddleId, cuddleName } = await request.json();
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    // Create or update user with name
+    // Prepare update data
+    const updateData: any = {
+      id: userId,
+      updated_at: new Date().toISOString()
+    };
+
+    if (name !== undefined) {
+      updateData.name = name || 'Username';
+    }
+
+    if (cuddleId !== undefined) {
+      updateData.cuddle_id = cuddleId;
+    }
+
+    if (cuddleName !== undefined) {
+      updateData.cuddle_name = cuddleName;
+    }
+
+    // Create or update user
     const { data, error } = await supabase
       .from('users')
-      .upsert({
-        id: userId,
-        name: name || 'Username',
-        updated_at: new Date().toISOString()
-      })
+      .upsert(updateData)
       .select()
       .single();
 
     if (error) {
       throw error;
-    }
-
-    // Store in localStorage as well
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('soul_journal_anonymous_name', data.name);
     }
 
     return NextResponse.json(data);

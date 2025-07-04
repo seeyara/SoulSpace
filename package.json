@@ -7,6 +7,9 @@
     "build": "next build --no-lint",
     "start": "next start",
     "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "test": "echo \"No tests specified\" && exit 0",
+    "test:coverage": "echo \"No tests specified\" && exit 0",
     "docker:deploy": "chmod +x ./scripts/docker-deploy.sh && ./scripts/docker-deploy.sh",
     "docker:build": "docker build -t soulspace-prod .",
     "docker:run": "docker run -p 3000:3000 soulspace-prod"

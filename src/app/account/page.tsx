@@ -13,7 +13,7 @@ import type { CuddleId } from '@/types/cuddles';
 export default function Account() {
   const [userName, setUserName] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
-  const [entries, setEntries] = useState<string[]>([]);
+  const [entries, setEntries] = useState<Array<{ date: string; cuddleId?: string }>>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [userId, setUserId] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -23,6 +23,7 @@ export default function Account() {
   const [selectedCuddle, setSelectedCuddle] = useState('olly-sr');
   const [streak, setStreak] = useState(0);
   const [cuddleName, setCuddleName] = useState('');
+  const [lastCuddleFromEntries, setLastCuddleFromEntries] = useState<string>('');
   const router = useRouter();
 
   useEffect(() => {
@@ -46,22 +47,40 @@ export default function Account() {
 
   useEffect(() => {
     const fetchCuddle = async () => {
-      const storedUserId = localStorage.getItem('soul_journal_user_id');
-      if (!storedUserId) return;
-      // Try Supabase first
-      const { data, error } = await supabase
-        .from('users')
-        .select('cuddle_id, cuddle_name')
-        .eq('id', storedUserId)
-        .single();
-      if (data && (data.cuddle_id || data.cuddle_name)) {
-        if (data.cuddle_id) setSelectedCuddle(data.cuddle_id);
-        if (data.cuddle_name) setCuddleName(data.cuddle_name);
-        // Save to localStorage for fallback
-        localStorage.setItem('soul_journal_cuddle_id', data.cuddle_id || '');
-        localStorage.setItem('soul_journal_cuddle_name', data.cuddle_name || '');
-      } else {
-        // Fallback to localStorage
+      try {
+        const storedUserId = localStorage.getItem('soul_journal_user_id');
+        if (!storedUserId) return;
+        
+        // Try Supabase first
+        const { data, error } = await supabase
+          .from('users')
+          .select('cuddle_id, cuddle_name')
+          .eq('id', storedUserId)
+          .single();
+        
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" error
+          console.error('Error fetching cuddle from Supabase:', error);
+        }
+        
+        if (data && (data.cuddle_id || data.cuddle_name)) {
+          // Found data in Supabase
+          if (data.cuddle_id) setSelectedCuddle(data.cuddle_id);
+          if (data.cuddle_name) setCuddleName(data.cuddle_name);
+          
+          // Update localStorage to keep it in sync
+          localStorage.setItem('soul_journal_cuddle_id', data.cuddle_id || '');
+          localStorage.setItem('soul_journal_cuddle_name', data.cuddle_name || '');
+        } else {
+          // No data in Supabase, fallback to localStorage
+          const localCuddleId = localStorage.getItem('soul_journal_cuddle_id');
+          const localCuddleName = localStorage.getItem('soul_journal_cuddle_name');
+          
+          if (localCuddleId) setSelectedCuddle(localCuddleId);
+          if (localCuddleName) setCuddleName(localCuddleName);
+        }
+      } catch (error) {
+        console.error('Error in fetchCuddle:', error);
+        // Fallback to localStorage on any error
         const localCuddleId = localStorage.getItem('soul_journal_cuddle_id');
         const localCuddleName = localStorage.getItem('soul_journal_cuddle_name');
         if (localCuddleId) setSelectedCuddle(localCuddleId);
@@ -69,7 +88,7 @@ export default function Account() {
       }
     };
     fetchCuddle();
-  }, []);
+  }, [userId]); // Only run when userId changes
 
   const handleNameChange = async (newName: string) => {
     if (newName.trim() === 'Username') {
@@ -98,8 +117,9 @@ export default function Account() {
     setIsEditingName(false);
   };
 
-  const calculateStreak = (dates: string[]): number => {
-    if (!dates.length) return 0;
+  const calculateStreak = (entries: Array<{ date: string; cuddleId?: string }>): number => {
+    if (!entries.length) return 0;
+    const dates = entries.map(entry => entry.date);
     const today = new Date();
     let currentStreak = 0;
     let date = today;
@@ -146,7 +166,7 @@ export default function Account() {
     try {
       const { data, error } = await supabase
         .from('chats')
-        .select('date')
+        .select('date, cuddle_id')
         .eq('user_id', userId)
         .order('date', { ascending: true });
 
@@ -156,16 +176,27 @@ export default function Account() {
       }
 
       if (data && data.length > 0) {
-        const entryDates = data.map(entry => entry.date);
-        setEntries(entryDates);
-        setStreak(calculateStreak(entryDates));
+        const entriesWithCuddle = data.map(entry => ({
+          date: entry.date,
+          cuddleId: entry.cuddle_id
+        }));
+        setEntries(entriesWithCuddle);
+        setStreak(calculateStreak(entriesWithCuddle));
+        
+        // Get the last cuddle from entries
+        const lastEntry = entriesWithCuddle[entriesWithCuddle.length - 1];
+        if (lastEntry.cuddleId) {
+          setLastCuddleFromEntries(lastEntry.cuddleId);
+        }
         
       } else {
         // No entries yet
+        setEntries([]);
         setStreak(0);
       }
     } catch (error) {
       console.error('Error in fetchEntries:', error);
+      setEntries([]);
       setStreak(0);
     }
   };
@@ -205,19 +236,12 @@ export default function Account() {
   };
 
   const handleCuddleSelection = async (cuddleId: CuddleId, cuddleName: string) => {
+    // Update state to reflect the newly selected cuddle
     setSelectedCuddle(cuddleId);
     setCuddleName(cuddleName);
     setIsCuddleModalOpen(false);
-    // Save to Supabase
-    if (userId) {
-      await supabase
-        .from('users')
-        .update({ cuddle_id: cuddleId, cuddle_name: cuddleName })
-        .eq('id', userId);
-    }
-    // Save to localStorage
-    localStorage.setItem('soul_journal_cuddle_id', cuddleId);
-    localStorage.setItem('soul_journal_cuddle_name', cuddleName);
+    
+    // Navigate to journaling with the selected cuddle
     router.push(`/journal?cuddle=${cuddleId}`);
   };
 
@@ -342,52 +366,61 @@ export default function Account() {
             transition={{ delay: 0.3 }}
             className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border-2 border-primary/5 hover:border-primary/10 transition-all"
           >
-            {entries.length === 0 ? (
-              // Nudge for users with no entries
-              <div className="text-center">
-                <h3 className="text-sm text-gray-500 mb-2">Your Cuddle Space 💜</h3>
-                <button
-                  onClick={() => setIsCuddleModalOpen(true)}
-                  className="bg-primary text-white px-4 py-2 rounded-xl font-medium hover:bg-primary/90 transition-colors text-sm"
-                >
-                  Pick Your Cuddle →
-                </button>
-              </div>
-            ) : selectedCuddle && cuddleName ? (
-              // 2. Show selected cuddle and name
-              <>
-                <h3 className="text-sm text-gray-500 mb-2">Your Cuddle 💜</h3>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 flex items-center justify-center overflow-hidden">
-                    <Image
-                      src={getCuddleImage(selectedCuddle)}
-                      alt={getCuddleName(selectedCuddle)}
-                      width={100}
-                      height={100}
-                      className="object-cover"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-lg font-medium text-primary">{cuddleName}</p>
-                    <p className="text-xs text-gray-500">{getCuddleName(selectedCuddle)}</p>
-                  </div>
-                </div>
-              </>
-            ) : (
-              // 3. Fallback: use cuddle from entry and generic name
-              (() => {
-                // If you have access to the first entry's cuddleId, use it here.
-                // For now, fallback to selectedCuddle or 'olly-sr'
-                let fallbackCuddle = selectedCuddle || 'olly-sr';
-                let genericName = fallbackCuddle.includes('ellie') ? 'Ellie' : 'Olly';
+            {(() => {
+              // Business logic: 
+              // 1. If user has selected a cuddle and set a name (in DB), show that
+              // 2. If not, show last cuddle from journal entries (if entries > 0)
+              // 3. Else show "Pick a cuddle" button
+              
+              if (selectedCuddle && cuddleName) {
+                // User has selected a cuddle and set a name
                 return (
                   <>
-                    <h3 className="text-sm text-gray-500 mb-2">Your Cuddle 💜</h3>
+                    <div className="flex justify-between items-center mb-2">
+                      <h3 className="text-sm text-gray-500">Your Cuddle 💜</h3>
+                      <button
+                        onClick={() => setIsCuddleModalOpen(true)}
+                        className="text-xs text-gray-500 hover:text-primary transition-colors underline"
+                      >
+                        Change cuddle
+                      </button>
+                    </div>
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 flex items-center justify-center overflow-hidden">
                         <Image
-                          src={getCuddleImage(fallbackCuddle)}
-                          alt={getCuddleName(fallbackCuddle)}
+                          src={getCuddleImage(selectedCuddle)}
+                          alt={getCuddleName(selectedCuddle)}
+                          width={100}
+                          height={100}
+                          className="object-cover"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-lg font-medium text-primary">{cuddleName}</p>
+                        <p className="text-xs text-gray-500">{getCuddleName(selectedCuddle)}</p>
+                      </div>
+                    </div>
+                  </>
+                );
+              } else if (entries.length > 0 && lastCuddleFromEntries) {
+                // Show last cuddle from journal entries
+                const genericName = lastCuddleFromEntries.includes('ellie') ? 'Ellie' : 'Olly';
+                return (
+                  <>
+                    <div className="flex justify-between items-center mb-2">
+                      <h3 className="text-sm text-gray-500">Your Cuddle 💜</h3>
+                      <button
+                        onClick={() => setIsCuddleModalOpen(true)}
+                        className="text-xs text-gray-500 hover:text-primary transition-colors underline"
+                      >
+                        Change cuddle
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 flex items-center justify-center overflow-hidden">
+                        <Image
+                          src={getCuddleImage(lastCuddleFromEntries)}
+                          alt={getCuddleName(lastCuddleFromEntries)}
                           width={100}
                           height={100}
                           className="object-cover"
@@ -395,13 +428,26 @@ export default function Account() {
                       </div>
                       <div>
                         <p className="text-lg font-medium text-primary">{genericName}</p>
-                        <p className="text-xs text-gray-500">{getCuddleName(fallbackCuddle)}</p>
+                        <p className="text-xs text-gray-500">{getCuddleName(lastCuddleFromEntries)}</p>
                       </div>
                     </div>
                   </>
                 );
-              })()
-            )}
+              } else {
+                // No entries or no cuddle selected - show pick a cuddle button
+                return (
+                  <div className="text-center">
+                    <h3 className="text-sm text-gray-500 mb-2">Your Cuddle Space 💜</h3>
+                    <button
+                      onClick={() => setIsCuddleModalOpen(true)}
+                      className="bg-primary text-white px-4 py-2 rounded-xl font-medium hover:bg-primary/90 transition-colors text-sm"
+                    >
+                      Pick Your Cuddle →
+                    </button>
+                  </div>
+                );
+              }
+            })()}
           </motion.div>
         </div>
 
@@ -432,7 +478,7 @@ export default function Account() {
           <div className="grid grid-cols-7 gap-2">
             {getDaysInMonth().map(date => {
               const dateStr = format(date, 'yyyy-MM-dd');
-              const hasEntry = entries.includes(dateStr);
+              const hasEntry = entries.some(entry => entry.date === dateStr);
               return (
                 <div
                   key={dateStr}
