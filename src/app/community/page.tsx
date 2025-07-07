@@ -7,7 +7,6 @@ import { LockClosedIcon } from '@heroicons/react/24/solid';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import CommunityAccessModal from '@/components/CommunityAccessModal';
-import { supabase } from '@/lib/supabase';
 
 type Reply = {
   id: string;
@@ -37,7 +36,6 @@ export default function Community() {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
-  const [replies, setReplies] = useState<Reply[]>([]);
   const [newReply, setNewReply] = useState('');
   
   // Loading states
@@ -206,7 +204,7 @@ export default function Community() {
           <>
             <h2 className="text-2xl font-semibold text-white mb-2">Your invite is on its way! ✨</h2>
             <p className="text-gray-200 text-center max-w-sm px-4 mb-6">
-              You'll soon get access to the exclusive Whispr Community
+              You&apos;ll soon get access to the exclusive Whispr Community
             </p>
           </>
         ) : (
@@ -394,10 +392,10 @@ export default function Community() {
                     <div className="flex justify-end">
                       <button
                         type="submit"
-                        disabled={!newReply.trim()}
+                        disabled={!newReply.trim() || isSubmitting}
                         className="bg-primary text-white px-6 py-2 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
                       >
-                        Reply
+                        {isSubmitting ? 'Sending...' : 'Reply'}
                       </button>
                     </div>
                   </form>

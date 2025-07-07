@@ -1,9 +1,9 @@
 'use client';
 
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { format, subDays, addDays } from 'date-fns';
+import { format, subDays } from 'date-fns';
 
 interface StreakModalProps {
   isOpen: boolean;
@@ -12,7 +12,7 @@ interface StreakModalProps {
   userId: string;
 }
 
-export default function StreakModal({ isOpen, onClose, date, userId }: StreakModalProps) {
+export default function StreakModal({ isOpen, onClose, userId }: StreakModalProps) {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +144,7 @@ export default function StreakModal({ isOpen, onClose, date, userId }: StreakMod
             transition={{ delay: 0.3 }}
             className="text-2xl font-semibold text-gray-900"
           >
-            ✨ You're a Star! ✨
+            ✨ You&apos;re a Star! ✨
           </motion.h3>
 
           {/* Calendar Section */}
@@ -269,7 +269,7 @@ export default function StreakModal({ isOpen, onClose, date, userId }: StreakMod
               className="text-center"
             >
               <p className="text-green-600 font-medium text-lg">
-                Amazing! We'll send you gentle reminders! ✨
+                Amazing! We&apos;ll send you gentle reminders! ✨
               </p>
               <motion.button
                 initial={{ opacity: 0 }}

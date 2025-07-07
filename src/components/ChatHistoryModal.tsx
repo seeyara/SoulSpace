@@ -1,10 +1,8 @@
 'use client';
 
-import { motion, AnimatePresence } from 'framer-motion';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import { format, isToday, isFuture, isPast } from 'date-fns';
+import { format, isToday, isFuture } from 'date-fns';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import { Dialog } from '@headlessui/react';
 
 interface ChatHistoryModalProps {
@@ -29,7 +27,6 @@ export default function ChatHistoryModal({
   selectedCuddle = '',
   cuddleName = ''
 }: ChatHistoryModalProps) {
-  const router = useRouter();
   
   if (!isOpen) return null;
 

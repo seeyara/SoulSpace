@@ -1,10 +1,10 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWithinInterval, subDays } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, subDays } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import ChatHistoryModal from '@/components/ChatHistoryModal';
 import CuddleSelectionModal from '@/components/CuddleSelectionModal';
@@ -16,7 +16,7 @@ export default function Account() {
   const [userName, setUserName] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
   const [entries, setEntries] = useState<Array<{ date: string; cuddleId?: string }>>([]);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth] = useState(new Date());
   const [userId, setUserId] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -27,6 +27,45 @@ export default function Account() {
   const [cuddleName, setCuddleName] = useState('');
   const [lastCuddleFromEntries, setLastCuddleFromEntries] = useState<string>('');
   const router = useRouter();
+
+  const fetchEntries = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('chats')
+        .select('date, cuddle_id')
+        .eq('user_id', userId)
+        .order('date', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching entries:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const entriesWithCuddle = data.map(entry => ({
+          date: entry.date,
+          cuddleId: entry.cuddle_id
+        }));
+        setEntries(entriesWithCuddle);
+        setStreak(calculateStreak(entriesWithCuddle));
+        
+        // Get the last cuddle from entries
+        const lastEntry = entriesWithCuddle[entriesWithCuddle.length - 1];
+        if (lastEntry.cuddleId) {
+          setLastCuddleFromEntries(lastEntry.cuddleId);
+        }
+        
+      } else {
+        // No entries yet
+        setEntries([]);
+        setStreak(0);
+      }
+    } catch (error) {
+      console.error('Error in fetchEntries:', error);
+      setEntries([]);
+      setStreak(0);
+    }
+  }, []);
 
   useEffect(() => {
     const initializeUser = async () => {
@@ -45,7 +84,7 @@ export default function Account() {
     };
 
     initializeUser();
-  }, [router]);
+  }, [router, fetchEntries]);
 
   useEffect(() => {
     const fetchCuddle = async () => {
@@ -166,45 +205,6 @@ export default function Account() {
     } catch (error) {
       console.error('Error in fetchUserData:', error);
       setUserName('Username');
-    }
-  };
-
-  const fetchEntries = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('chats')
-        .select('date, cuddle_id')
-        .eq('user_id', userId)
-        .order('date', { ascending: true });
-
-      if (error) {
-        console.error('Error fetching entries:', error);
-        return;
-      }
-
-      if (data && data.length > 0) {
-        const entriesWithCuddle = data.map(entry => ({
-          date: entry.date,
-          cuddleId: entry.cuddle_id
-        }));
-        setEntries(entriesWithCuddle);
-        setStreak(calculateStreak(entriesWithCuddle));
-        
-        // Get the last cuddle from entries
-        const lastEntry = entriesWithCuddle[entriesWithCuddle.length - 1];
-        if (lastEntry.cuddleId) {
-          setLastCuddleFromEntries(lastEntry.cuddleId);
-        }
-        
-      } else {
-        // No entries yet
-        setEntries([]);
-        setStreak(0);
-      }
-    } catch (error) {
-      console.error('Error in fetchEntries:', error);
-      setEntries([]);
-      setStreak(0);
     }
   };
 
@@ -354,7 +354,7 @@ export default function Account() {
           className="mb-8 text-center"
         >
           <p className="text-lg text-primary/80 italic">
-            "Eighty percent of success is showing up."
+            &ldquo;Eighty percent of success is showing up.&rdquo;
           </p>
           <p className="text-sm text-primary/60 mt-2">
             - Woody Allen

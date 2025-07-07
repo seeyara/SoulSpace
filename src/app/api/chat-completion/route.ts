@@ -9,6 +9,11 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Define interface for message structure
+interface ChatMessage {
+  role: string;
+  content: string;
+}
 
 const createPrompt = (cuddleId: CuddleId, exchange: number, age?: string, gender?: string, city?: string) => {
   
@@ -63,7 +68,7 @@ export async function POST(request: Request) {
         userProfile = JSON.parse(profileData);
         console.log('User Profile:', userProfile);
       }
-    } catch (error) {
+    } catch {
       console.log('No user profile available');
     }
 
@@ -126,7 +131,7 @@ export async function POST(request: Request) {
         role: "system",
         content: personalizedPrompt
       },
-      ...messageHistory.map((msg: any) => ({
+      ...messageHistory.map((msg: ChatMessage) => ({
         role: msg.role,
         content: msg.content
       })),

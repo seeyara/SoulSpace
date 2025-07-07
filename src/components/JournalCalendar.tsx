@@ -1,4 +1,4 @@
-import { format, subDays, addDays, isToday } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { JournalStreak } from '@/lib/supabase';
 
 interface JournalCalendarProps {
