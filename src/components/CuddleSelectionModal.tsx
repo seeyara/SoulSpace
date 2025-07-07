@@ -116,6 +116,7 @@ export default function CuddleSelectionModal({ isOpen, onClose, onSelectCuddle }
       // Save to Supabase
       const storedUserId = localStorage.getItem('soul_journal_user_id');
       if (storedUserId) {
+        console.log('Saving to Supabase', storedUserId, selectedCuddle, trimmedName);
         const response = await fetch('/api/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -5,20 +5,12 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { storage } from '@/lib/storage';
 import DateSelector from '@/components/DateSelector';
 import ChatHistoryModal from '@/components/ChatHistoryModal';
 import { Sparkles } from 'lucide-react';
 
-// Add animation keyframes to your global CSS or add them here
-const floatAnimation = {
-  '0%, 100%': { transform: 'translateY(0)' },
-  '50%': { transform: 'translateY(-20px)' }
-};
 
-const fadeIn = {
-  '0%': { opacity: 0, transform: 'translateY(10px)' },
-  '100%': { opacity: 1, transform: 'translateY(0)' }
-};
 
 const cuddleAttributes = {
   'olly-sr': {
@@ -93,38 +85,63 @@ function AnimatedNumber({ value, suffix }: { value: number; suffix: string }) {
 export default function Home() {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [userId, setUserId] = useState<string>('');
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedCuddle, setSelectedCuddle] = useState<string | null>(null);
 
-  // Group consecutive assistant messages
-  const groupedMessages = chatMessages.reduce((acc, message, index) => {
-    if (message.role === 'assistant' && 
-        index > 0 && 
-        acc.length > 0 && 
-        acc[acc.length - 1].role === 'assistant') {
-      acc[acc.length - 1].content += '\n\n' + message.content;
-    } else {
-      acc.push({ ...message });
-    }
-    return acc;
-  }, [] as typeof chatMessages);
-
   useEffect(() => {
-    // Retrieve user ID from localStorage if it exists
-    const storedUserId = localStorage.getItem('soul_journal_user_id');
+    // Retrieve user ID from storage if it exists
+    const storedUserId = storage.getUserId();
     if (storedUserId) {
       setUserId(storedUserId);
     }
   }, []);
 
+  useEffect(() => {
+    const fetchCuddle = async () => {
+      try {
+        const storedUserId = storage.getUserId();
+        if (!storedUserId) return;
+        
+        const { data, error } = await supabase
+          .from('users')
+          .select('cuddle_id, cuddle_name')
+          .eq('id', storedUserId)
+          .single();
+        
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" error
+          console.error('Error fetching cuddle from Supabase:', error);
+        }
+        
+        if (data && (data.cuddle_id || data.cuddle_name)) {
+          // Found data in Supabase
+          if (data.cuddle_id) setSelectedCuddle(data.cuddle_id);
+          
+          // Update storage to keep it in sync
+          storage.setCuddleId(data.cuddle_id || '');
+          storage.setCuddleName(data.cuddle_name || '');
+        } else {
+          // No data in Supabase, fallback to storage
+          const localCuddleId = storage.getCuddleId();
+          
+          if (localCuddleId) setSelectedCuddle(localCuddleId);
+        }
+      } catch (error) {
+        console.error('Error in fetchCuddle:', error);
+        // Fallback to storage on any error
+        const localCuddleId = storage.getCuddleId();
+        if (localCuddleId) setSelectedCuddle(localCuddleId);
+      }
+    };
+    fetchCuddle();
+  }, [userId]);
+
   const handleDateSelect = async (date: string) => {
     setSelectedDate(date);
     setIsHistoryModalOpen(true);
     // Get stored user ID
-    const storedUserId = localStorage.getItem('soul_journal_user_id');
+    const storedUserId = storage.getUserId();
     if (!storedUserId) {
       // If no user ID, prompt them to start journaling first
       return; // Don't open modal, they need to start journaling first
@@ -196,7 +213,7 @@ export default function Home() {
               transition={{ delay: 0.4 }}
               className="text-5xl lg:text-7xl font-bold text-gray-800 mb-6 leading-tight text-center"
             >
-              Let's{" "}
+              Let&apos;s{" "}
               <span className="text-primary relative">
                 untangle
                 <div className="absolute -bottom-2 left-0 w-full h-1 bg-gradient-to-r from-primary/40 to-primary/20 rounded-full"></div>

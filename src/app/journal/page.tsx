@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import axios from 'axios';
 import { event as gaEvent } from '@/lib/utils/gtag';
+import { storage } from '@/lib/storage';
 const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue or finish our conversation?";
 
 function JournalContent() {
@@ -20,15 +21,13 @@ function JournalContent() {
   const router = useRouter();
   const [userId, setUserId] = useState<string>('');
   const [selectedCuddle, setSelectedCuddle] = useState<CuddleId>('ellie-sr');
-  const [selectedDate, setSelectedDate] = useState<string>(searchParams.get('date') || format(new Date(), 'yyyy-MM-dd'));
-  const [currentPrompt, setCurrentPrompt] = useState<string>('');
+  const [selectedDate] = useState<string>(searchParams.get('date') || format(new Date(), 'yyyy-MM-dd'));
   const [isTyping, setIsTyping] = useState(true);
   const [userResponse, setUserResponse] = useState('');
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
   const [showInput, setShowInput] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
-  const [usedPrompts, setUsedPrompts] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isWelcomeBack, setIsWelcomeBack] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -47,7 +46,7 @@ function JournalContent() {
   useEffect(() => {
     const initializeUser = async () => {
       try {
-        const storedUserId = localStorage.getItem('soul_journal_user_id');
+        const storedUserId = storage.getUserId();
 
         if (storedUserId) {
           console.log('Using stored user ID:', storedUserId);
@@ -84,7 +83,7 @@ function JournalContent() {
           if (newUser) {
             const newUserId = newUser.id;
             console.log('Created new user:', newUserId);
-            localStorage.setItem('soul_journal_user_id', newUserId);
+            storage.setUserId(newUserId);
             setUserId(newUserId);
             setUserName('Username');
             
@@ -105,23 +104,10 @@ function JournalContent() {
   // Load userId and selectedCuddle from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setUserId(localStorage.getItem('soul_journal_user_id') || '');
-      setSelectedCuddle((localStorage.getItem('soul_journal_cuddle_id') || searchParams.get('cuddle') || 'ellie-sr') as CuddleId);
+      setUserId(storage.getUserId() || '');
+      setSelectedCuddle((storage.getCuddleId() || searchParams.get('cuddle') || 'ellie-sr') as CuddleId);
     }
   }, [searchParams]);
-
-  // Group consecutive assistant messages
-  const groupedMessages = messages.reduce((acc, message, index) => {
-    if (message.role === 'assistant' &&
-      index > 0 &&
-      acc.length > 0 &&
-      acc[acc.length - 1].role === 'assistant') {
-      acc[acc.length - 1].content += '\n\n' + message.content;
-    } else {
-      acc.push({ ...message });
-    }
-    return acc;
-  }, [] as typeof messages);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -136,7 +122,7 @@ function JournalContent() {
 
   useEffect(() => {
     const fetchChatHistory = async () => {
-      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      const storedUserId = storage.getUserId();
       if (!storedUserId) {
         // Don't start conversation yet if no user ID (wait for privacy modal)
         return;
@@ -217,12 +203,12 @@ function JournalContent() {
     };
 
     fetchChatHistory();
-  }, [selectedCuddle, selectedDate, userId, journalingMode]);
+  }, [selectedCuddle, selectedDate, userId, journalingMode, showPrivacyModal]);
 
   // Separate effect to handle privacy modal state changes
   useEffect(() => {
     if (!showPrivacyModal && userId && messages.length === 0) {
-      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      const storedUserId = storage.getUserId();
       if (storedUserId) {
         // Check if this is a new user (has temp_session_id)
         const checkIfNewUser = async () => {
@@ -254,13 +240,13 @@ function JournalContent() {
         checkIfNewUser();
       }
     }
-  }, [showPrivacyModal, userId, selectedCuddle]);
+  }, [showPrivacyModal, userId, selectedCuddle, messages.length]);
 
   useEffect(() => {
     // Load ongoing conversation from localStorage if exists
-    const ongoingConversation = localStorage.getItem('ongoing_journal_conversation');
+    const ongoingConversation = storage.getOngoingConversation();
     if (ongoingConversation) {
-      const { messages: savedMessages, cuddle } = JSON.parse(ongoingConversation);
+      const { messages: savedMessages, cuddle } = ongoingConversation;
       if (cuddle === selectedCuddle) {
         setMessages(savedMessages);
         setShowInput(true);
@@ -272,7 +258,7 @@ function JournalContent() {
   // Fetch last unfinished entry on mount
   useEffect(() => {
     const fetchLastUnfinishedEntry = async () => {
-      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      const storedUserId = storage.getUserId();
       if (!storedUserId) return;
       try {
         const res = await fetch(`/api/chat?userId=${storedUserId}&unfinished=1`);
@@ -284,7 +270,7 @@ function JournalContent() {
             setFreeFormContent(data.lastUnfinished.content);
           }
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
     };
@@ -295,7 +281,7 @@ function JournalContent() {
     e.preventDefault();
     if (!userResponse.trim()) return;
 
-    const storedUserId = localStorage.getItem('soul_journal_user_id');
+    const storedUserId = storage.getUserId();
     if (!storedUserId) {
       console.error('No user ID available');
       router.push('/');
@@ -312,8 +298,7 @@ function JournalContent() {
 
     try {
       // Get user profile from localStorage
-      const userProfileData = localStorage.getItem('user_profile');
-      const userProfile = userProfileData ? JSON.parse(userProfileData) : null;
+      const userProfile = storage.getUserProfile();
 
       let response;
       try {
@@ -373,10 +358,10 @@ function JournalContent() {
             setMessages(finalMessages);
 
             // Save to localStorage
-            localStorage.setItem('ongoing_journal_conversation', JSON.stringify({
+            storage.setOngoingConversation({
               messages: finalMessages,
               cuddle: selectedCuddle
-            }));
+            });
 
             if (shouldEnd) {
               setTimeout(() => {
@@ -390,10 +375,10 @@ function JournalContent() {
         }, 500); // 0.5 second delay before starting second message
       } else {
         // If no second message, just save and continue
-        localStorage.setItem('ongoing_journal_conversation', JSON.stringify({
+        storage.setOngoingConversation({
           messages: updatedMessagesWithFirst,
           cuddle: selectedCuddle
-        }));
+        });
 
         if (shouldEnd) {
           setTimeout(() => {
@@ -420,7 +405,7 @@ function JournalContent() {
     e.preventDefault();
     if (!freeFormContent.trim()) return;
 
-    const storedUserId = localStorage.getItem('soul_journal_user_id');
+    const storedUserId = storage.getUserId();
     if (!storedUserId) {
       console.error('No user ID available');
       router.push('/');
@@ -510,37 +495,6 @@ function JournalContent() {
     }
   };
 
-  const handleStartJournaling = () => {
-    gaEvent({
-      action: 'start_journaling',
-      category: 'journal',
-      label: selectedCuddle,
-    });
-    setShowInput(false);
-
-    // Filter out used prompts
-    const availablePrompts = cuddleData.cuddles[selectedCuddle].prompts.filter(p => !usedPrompts.includes(p));
-    let selectedPrompt;
-
-    if (availablePrompts.length === 0) {
-      // If all prompts are used, reset the used prompts
-      setUsedPrompts([]);
-      selectedPrompt = availablePrompts[Math.floor(Math.random() * availablePrompts.length)];
-    } else {
-      selectedPrompt = availablePrompts[Math.floor(Math.random() * availablePrompts.length)];
-    }
-
-    setCurrentPrompt(selectedPrompt);
-    setUsedPrompts(prev => [...prev, selectedPrompt]);
-
-    setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
-      setMessages(prev => [...prev, { role: 'assistant', content: selectedPrompt }]);
-      setShowInput(true);
-    }, 2000);
-  };
-
   const handleCloseStreakModal = () => {
     setShowStreakModal(false);
     router.push('/account');
@@ -552,8 +506,8 @@ function JournalContent() {
 
   const getDisplayCuddleName = (id: string) => {
     // Check localStorage first for custom cuddle name
-    const customName = localStorage.getItem('soul_journal_cuddle_name');
-    const storedCuddleId = localStorage.getItem('soul_journal_cuddle_id');
+    const customName = storage.getCuddleName();
+    const storedCuddleId = storage.getCuddleId();
     
     // If we have a custom name and it matches the current cuddle, use it
     if (customName && storedCuddleId === id) {
@@ -582,7 +536,7 @@ function JournalContent() {
       action: 'end_chat_button',
       category: 'journal',
     });
-    const storedUserId = localStorage.getItem('soul_journal_user_id');
+    const storedUserId = storage.getUserId();
     if (!storedUserId) {
       console.error('No user ID available');
       router.push('/');
@@ -696,12 +650,12 @@ function JournalContent() {
     const handleScroll = async () => {
       if (isLoadingMore || !hasMoreMessages) return;
 
-      const { scrollTop, scrollHeight, clientHeight } = container;
+      const { scrollTop } = container;
       // If we're near the top (scrollTop is small), load more messages
       if (scrollTop < 100) {
         setIsLoadingMore(true);
         try {
-          const storedUserId = localStorage.getItem('soul_journal_user_id');
+          const storedUserId = storage.getUserId();
           if (!storedUserId) return;
 
           const today = format(new Date(), 'yyyy-MM-dd');
@@ -739,7 +693,7 @@ function JournalContent() {
     const saveOnUnload = () => {
       if (isSavingRef.current) return;
       isSavingRef.current = true;
-      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      const storedUserId = storage.getUserId();
       if (!storedUserId) return;
       // Only save if there is content
       if ((journalingMode === 'free-form' && freeFormContent.trim()) || (journalingMode === 'guided' && messages.length > 0)) {
@@ -769,7 +723,7 @@ function JournalContent() {
       }
       isSavingRef.current = false;
     };
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    const handleBeforeUnload = () => {
       saveOnUnload();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);

@@ -38,8 +38,54 @@ export async function GET(request: Request) {
     const userId = searchParams.get('userId');
     const date = searchParams.get('date');
     const page = parseInt(searchParams.get('page') || '1');
+    const unfinished = searchParams.get('unfinished');
 
-    if (!userId || !date) {
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Missing required parameters' },
+        { status: 400 }
+      );
+    }
+
+    // Handle unfinished parameter
+    if (unfinished === '1') {
+      try {
+        const { data, error } = await supabase
+          .from('chats')
+          .select('messages, cuddle_id')
+          .eq('user_id', userId)
+          .order('date', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (error && error.code !== 'PGRST116') {
+          throw error;
+        }
+
+        if (data && data.messages && data.messages.length > 0) {
+          const lastMessage = data.messages[data.messages.length - 1];
+          // Check if the last message is from the user (indicating an unfinished conversation)
+          if (lastMessage.role === 'user') {
+            return NextResponse.json({
+              data: {
+                lastUnfinished: {
+                  mode: 'guided',
+                  content: lastMessage.content
+                }
+              }
+            });
+          }
+        }
+
+        return NextResponse.json({ data: null });
+      } catch (error) {
+        console.error('Error fetching unfinished entry:', error);
+        return NextResponse.json({ data: null });
+      }
+    }
+
+    // Regular chat history fetch
+    if (!date) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }

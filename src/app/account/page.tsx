@@ -10,6 +10,7 @@ import ChatHistoryModal from '@/components/ChatHistoryModal';
 import CuddleSelectionModal from '@/components/CuddleSelectionModal';
 import type { CuddleId } from '@/types/cuddles';
 import { event as gaEvent } from '@/lib/utils/gtag';
+import { storage } from '@/lib/storage';
 
 export default function Account() {
   const [userName, setUserName] = useState('');
@@ -29,7 +30,7 @@ export default function Account() {
 
   useEffect(() => {
     const initializeUser = async () => {
-      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      const storedUserId = storage.getUserId();
       if (!storedUserId) {
         setUserName('Username');
         router.push('/journal');
@@ -49,7 +50,7 @@ export default function Account() {
   useEffect(() => {
     const fetchCuddle = async () => {
       try {
-        const storedUserId = localStorage.getItem('soul_journal_user_id');
+        const storedUserId = storage.getUserId();
         if (!storedUserId) return;
         
         // Try Supabase first
@@ -69,12 +70,12 @@ export default function Account() {
           if (data.cuddle_name) setCuddleName(data.cuddle_name);
           
           // Update localStorage to keep it in sync
-          localStorage.setItem('soul_journal_cuddle_id', data.cuddle_id || '');
-          localStorage.setItem('soul_journal_cuddle_name', data.cuddle_name || '');
+          storage.setCuddleId(data.cuddle_id || '');
+          storage.setCuddleName(data.cuddle_name || '');
         } else {
           // No data in Supabase, fallback to localStorage
-          const localCuddleId = localStorage.getItem('soul_journal_cuddle_id');
-          const localCuddleName = localStorage.getItem('soul_journal_cuddle_name');
+          const localCuddleId = storage.getCuddleId();
+          const localCuddleName = storage.getCuddleName();
           
           if (localCuddleId) setSelectedCuddle(localCuddleId);
           if (localCuddleName) setCuddleName(localCuddleName);
@@ -82,8 +83,8 @@ export default function Account() {
       } catch (error) {
         console.error('Error in fetchCuddle:', error);
         // Fallback to localStorage on any error
-        const localCuddleId = localStorage.getItem('soul_journal_cuddle_id');
-        const localCuddleName = localStorage.getItem('soul_journal_cuddle_name');
+        const localCuddleId = storage.getCuddleId();
+        const localCuddleName = storage.getCuddleName();
         if (localCuddleId) setSelectedCuddle(localCuddleId);
         if (localCuddleName) setCuddleName(localCuddleName);
       }
