@@ -162,7 +162,7 @@ export async function POST(request: Request) {
     console.log('Finish Reason:', completion.choices[0].finish_reason);
 
     // Parse the response using explicit Message1 and Message2 markers
-    let responseMessages = ['', ''];
+    const responseMessages = ['', ''];
     
     // Try to extract Message1 and Message2 using the explicit format
     const message1Match = aiResponse.match(/Message1:\s*([\s\S]*?)(?=\s*Message2:|$)/);

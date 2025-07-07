@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import ChatHistoryModal from '@/components/ChatHistoryModal';
 import CuddleSelectionModal from '@/components/CuddleSelectionModal';
 import type { CuddleId } from '@/types/cuddles';
+import { event as gaEvent } from '@/lib/utils/gtag';
 
 export default function Account() {
   const [userName, setUserName] = useState('');
@@ -98,7 +99,12 @@ export default function Account() {
     }
 
     setUserName(newName);
-    
+
+    gaEvent({
+      action: 'update_username',
+      category: 'account',
+      label: newName,
+    });
     if (userId) {
       try {
         await fetch('/api/users', {
@@ -236,6 +242,12 @@ export default function Account() {
   };
 
   const handleCuddleSelection = async (cuddleId: CuddleId, cuddleName: string) => {
+    gaEvent({
+      action: 'pick_cuddle',
+      category: 'account',
+      label: cuddleId,
+      value: cuddleName,
+    });
     // Update state to reflect the newly selected cuddle
     setSelectedCuddle(cuddleId);
     setCuddleName(cuddleName);
@@ -439,7 +451,13 @@ export default function Account() {
                   <div className="text-center">
                     <h3 className="text-sm text-gray-500 mb-2">Your Cuddle Space 💜</h3>
                     <button
-                      onClick={() => setIsCuddleModalOpen(true)}
+                      onClick={() => {
+                        gaEvent({
+                          action: 'pick_cuddle_button',
+                          category: 'account',
+                        });
+                        setIsCuddleModalOpen(true);
+                      }}
                       className="bg-primary text-white px-4 py-2 rounded-xl font-medium hover:bg-primary/90 transition-colors text-sm"
                     >
                       Pick Your Cuddle →

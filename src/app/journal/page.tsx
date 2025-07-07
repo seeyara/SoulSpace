@@ -12,6 +12,7 @@ import PrivacyModal from '@/components/PrivacyModal';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import axios from 'axios';
+import { event as gaEvent } from '@/lib/utils/gtag';
 const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue our conversation or finish this entry?";
 
 function JournalContent() {
@@ -39,6 +40,7 @@ function JournalContent() {
   const [journalingMode, setJournalingMode] = useState<'guided' | 'free-form' | null>(null);
   const [freeFormContent, setFreeFormContent] = useState('');
   const [showSuggestedReplies, setShowSuggestedReplies] = useState(false);
+  const [lastUnfinishedEntry, setLastUnfinishedEntry] = useState<null | { mode: 'guided' | 'free-form', content: string }>(null);
 
   // Initialize user and start intro message
   useEffect(() => {
@@ -257,6 +259,28 @@ function JournalContent() {
     }
   }, [selectedCuddle]);
 
+  // Fetch last unfinished entry on mount
+  useEffect(() => {
+    const fetchLastUnfinishedEntry = async () => {
+      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      if (!storedUserId) return;
+      try {
+        const res = await fetch(`/api/chat?userId=${storedUserId}&unfinished=1`);
+        const { data } = await res.json();
+        if (data && data.lastUnfinished) {
+          setLastUnfinishedEntry(data.lastUnfinished);
+          if (data.lastUnfinished.mode === 'free-form') {
+            setJournalingMode('free-form');
+            setFreeFormContent(data.lastUnfinished.content);
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchLastUnfinishedEntry();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userResponse.trim()) return;
@@ -440,6 +464,12 @@ function JournalContent() {
   };
 
   const handleModeSelection = (mode: 'guided' | 'free-form') => {
+    gaEvent({
+      action: 'guided_or_free_choice',
+      category: 'journal',
+      label: mode,
+      value: selectedCuddle,
+    });
     setJournalingMode(mode);
     setShowSuggestedReplies(false);
     
@@ -461,6 +491,11 @@ function JournalContent() {
   };
 
   const handleStartJournaling = () => {
+    gaEvent({
+      action: 'start_journaling',
+      category: 'journal',
+      label: selectedCuddle,
+    });
     setShowInput(false);
 
     // Filter out used prompts
@@ -523,6 +558,10 @@ function JournalContent() {
   };
 
   const handleFinishEntry = async () => {
+    gaEvent({
+      action: 'end_chat_button',
+      category: 'journal',
+    });
     const storedUserId = localStorage.getItem('soul_journal_user_id');
     if (!storedUserId) {
       console.error('No user ID available');
@@ -592,76 +631,26 @@ function JournalContent() {
   };
 
   const handleContinue = async () => {
+    gaEvent({
+      action: 'continue_button',
+      category: 'journal',
+    });
     setIsWelcomeBack(false);
     setShowInput(false);
     setIsTyping(true);
 
-    const continueMessage = {
-      role: 'user' as const,
-      content: "I'd like to continue our conversation."
-    };
-    setMessages(prev => [...prev, continueMessage]);
-
-    try {
-      const response = await fetch('/api/chat-completion', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: continueMessage.content,
-          cuddleId: selectedCuddle,
-          messageHistory: messages
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get AI response');
-      }
-
-      const { response: aiResponse } = await response.json();
-
-      // Split the AI response into two messages
-      const responseParts = aiResponse.split('\n\n');
-      const firstMessage = responseParts[0] || aiResponse;
-      const secondMessage = responseParts[1] || '';
-
-      // Add the first message immediately
-      const firstAssistantMessage = {
-        role: 'assistant' as const,
-        content: firstMessage
-      };
-
-      const updatedMessagesWithFirst = [...messages, continueMessage, firstAssistantMessage];
-      setIsTyping(false);
-      setMessages(updatedMessagesWithFirst);
-
-      // Add the second message after a short delay for natural flow
-      if (secondMessage) {
-        setTimeout(() => {
-          setIsTyping(true);
-          setTimeout(() => {
-            const secondAssistantMessage = {
-              role: 'assistant' as const,
-              content: secondMessage
-            };
-            const finalMessages = [...updatedMessagesWithFirst, secondAssistantMessage];
-            setIsTyping(false);
-            setMessages(finalMessages);
-            setShowInput(true);
-            setJournalingMode('guided'); // Set guided mode for continued conversations
-          }, 1000); // 1 second typing delay for second message
-        }, 500); // 0.5 second delay before starting second message
-      } else {
-        setShowInput(true);
-        setJournalingMode('guided'); // Set guided mode for continued conversations
-      }
-    } catch (error) {
-      console.error('Error in handleContinue:', error);
+    // If last unfinished entry is free-form, load it
+    if (lastUnfinishedEntry && lastUnfinishedEntry.mode === 'free-form') {
+      setJournalingMode('free-form');
+      setFreeFormContent(lastUnfinishedEntry.content);
       setIsTyping(false);
       setShowInput(true);
-      setJournalingMode('guided'); // Set guided mode for continued conversations
+      return;
     }
+    // If not, show mode selection
+    setJournalingMode(null);
+    setIsTyping(false);
+    setShowSuggestedReplies(true);
   };
 
   // Add this effect to update the name in the database when finishing entry

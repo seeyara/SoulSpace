@@ -5,6 +5,7 @@ import Account from '@/assets/Account';
 import CommunityIcon from '@/assets/CommunityIcon';
 import HomeIcon from '@/assets/HomeIcon';
 import JournalIcon from '@/assets/JournalIcon';
+import { event as gaEvent } from '@/lib/utils/gtag';
 
 const navItems = [
   { name: 'Home', Icon: HomeIcon, path: '/' },
@@ -28,7 +29,15 @@ export default function BottomNav() {
               return (
                 <button
                   key={item.name}
-                  onClick={() => router.push(item.path)}
+                  onClick={() => {
+                    gaEvent({
+                      action: 'nav_click',
+                      category: 'navigation',
+                      label: item.name,
+                      value: item.path,
+                    });
+                    router.push(item.path);
+                  }}
                   className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all ${
                     isActive ? 'text-primary' : 'text-gray-500 hover:text-primary/80'
                   }`}
@@ -54,7 +63,15 @@ export default function BottomNav() {
               return (
                 <button
                   key={item.name}
-                  onClick={() => router.push(item.path)}
+                  onClick={() => {
+                    gaEvent({
+                      action: 'nav_click',
+                      category: 'navigation',
+                      label: item.name,
+                      value: item.path,
+                    });
+                    router.push(item.path);
+                  }}
                   className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all ${
                     isActive ? 'text-primary' : 'text-gray-500 hover:text-primary/80'
                   }`}
