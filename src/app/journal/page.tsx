@@ -13,18 +13,18 @@ import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import axios from 'axios';
 import { event as gaEvent } from '@/lib/utils/gtag';
-const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue our conversation or finish this entry?";
+const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue or finish our conversation?";
 
 function JournalContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const selectedCuddle = (localStorage.getItem('soul_journal_cuddle_id') || searchParams.get('cuddle') || 'ellie-sr') as CuddleId;
-  const selectedDate = searchParams.get('date') || format(new Date(), 'yyyy-MM-dd');
+  const [userId, setUserId] = useState<string>('');
+  const [selectedCuddle, setSelectedCuddle] = useState<CuddleId>('ellie-sr');
+  const [selectedDate, setSelectedDate] = useState<string>(searchParams.get('date') || format(new Date(), 'yyyy-MM-dd'));
   const [currentPrompt, setCurrentPrompt] = useState<string>('');
   const [isTyping, setIsTyping] = useState(true);
   const [userResponse, setUserResponse] = useState('');
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
-  const [userId, setUserId] = useState<string>('');
   const [showInput, setShowInput] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
@@ -41,6 +41,7 @@ function JournalContent() {
   const [freeFormContent, setFreeFormContent] = useState('');
   const [showSuggestedReplies, setShowSuggestedReplies] = useState(false);
   const [lastUnfinishedEntry, setLastUnfinishedEntry] = useState<null | { mode: 'guided' | 'free-form', content: string }>(null);
+  const isSavingRef = useRef(false);
 
   // Initialize user and start intro message
   useEffect(() => {
@@ -101,6 +102,14 @@ function JournalContent() {
     initializeUser();
   }, []);
 
+  // Load userId and selectedCuddle from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setUserId(localStorage.getItem('soul_journal_user_id') || '');
+      setSelectedCuddle((localStorage.getItem('soul_journal_cuddle_id') || searchParams.get('cuddle') || 'ellie-sr') as CuddleId);
+    }
+  }, [searchParams]);
+
   // Group consecutive assistant messages
   const groupedMessages = messages.reduce((acc, message, index) => {
     if (message.role === 'assistant' &&
@@ -148,7 +157,8 @@ function JournalContent() {
           setHasMoreMessages(data.hasMore);
           setPage(1);
 
-          if (!hasWelcomeBack) {
+          // Only add welcome back message if we're not in free-form mode and don't already have it
+          if (!hasWelcomeBack && journalingMode !== 'free-form') {
             // Add continuation message after loading chat history
             setTimeout(() => {
               setIsTyping(true);
@@ -162,7 +172,7 @@ function JournalContent() {
                 setShowInput(true);
               }, 1500);
             }, 1000);
-          } else {
+          } else if (hasWelcomeBack) {
             setIsWelcomeBack(true);
             setShowInput(true);
           }
@@ -207,7 +217,7 @@ function JournalContent() {
     };
 
     fetchChatHistory();
-  }, [selectedCuddle, selectedDate, userId]);
+  }, [selectedCuddle, selectedDate, userId, journalingMode]);
 
   // Separate effect to handle privacy modal state changes
   useEffect(() => {
@@ -442,14 +452,24 @@ function JournalContent() {
       setFreeFormContent('');
       setShowInput(false);
       setIsTyping(true);
+      setJournalingMode('free-form');
       
       setTimeout(() => {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: "Thank you for sharing your thoughts with me. I've saved your journal entry. 💜\n\nHow would you like to journal today?"
-        }]);
+        setMessages(prev => [
+          ...prev,
+          { role: 'user', content: freeFormContent },
+          {
+            role: 'assistant',
+            content: "Thank you for sharing your thoughts with me. I've saved your journal entry. 💜 \n Come back tomorrow for more journaling!"
+          }
+        ]);
         setIsTyping(false);
         setShowSuggestedReplies(true);
+        
+        // Show streak modal after the thank you message
+        setTimeout(() => {
+          setShowStreakModal(true);
+        }, 1500);
       }, 1000);
 
     } catch (error) {
@@ -615,9 +635,6 @@ function JournalContent() {
           }),
         });
 
-        // Clear the ongoing conversation from localStorage
-        localStorage.removeItem('ongoing_journal_conversation');
-
         setTimeout(() => {
           setShowStreakModal(true);
         }, 1500);
@@ -718,6 +735,49 @@ function JournalContent() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [page, isLoadingMore, hasMoreMessages]);
 
+  useEffect(() => {
+    const saveOnUnload = () => {
+      if (isSavingRef.current) return;
+      isSavingRef.current = true;
+      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      if (!storedUserId) return;
+      // Only save if there is content
+      if ((journalingMode === 'free-form' && freeFormContent.trim()) || (journalingMode === 'guided' && messages.length > 0)) {
+        const payload = {
+          messages: journalingMode === 'free-form'
+            ? [{ role: 'user', content: freeFormContent }]
+            : messages,
+          userId: storedUserId,
+          cuddleId: selectedCuddle,
+          date: selectedDate,
+          implicit: true,
+        };
+        const url = '/api/chat';
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        console.log('fallback for browsers without sendBeacon');
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(url, blob);
+        } else {
+          // fallback for browsers without sendBeacon
+          fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            keepalive: true,
+          });
+        }
+      }
+      isSavingRef.current = false;
+    };
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      saveOnUnload();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [journalingMode, freeFormContent, messages, selectedCuddle, selectedDate]);
+
   return (
     <main className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -815,16 +875,16 @@ function JournalContent() {
                       )}
                       {isLastAssistantMessage && showSuggestedReplies && !journalingMode && (
                         <div className="mt-3">
-                          <div className="flex gap-2">
+                          <div className="flex flex-col gap-2 w-full">
                             <button
                               onClick={() => handleModeSelection('guided')}
-                              className="bg-primary text-white px-4 py-2 rounded-xl font-medium hover:bg-primary/90 transition-colors text-sm flex-1"
+                              className="bg-primary text-white w-full whitespace-nowrap px-4 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors text-base"
                             >
                               💬 Guided Journaling
                             </button>
                             <button
                               onClick={() => handleModeSelection('free-form')}
-                              className="bg-primary text-white px-4 py-2 rounded-xl font-medium hover:bg-primary/90 transition-colors text-sm flex-1"
+                              className="bg-primary text-white w-full whitespace-nowrap px-4 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors text-base"
                             >
                               ✍️ Free Journaling
                             </button>
