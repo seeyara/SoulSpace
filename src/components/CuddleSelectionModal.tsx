@@ -224,7 +224,7 @@ export default function CuddleSelectionModal({ isOpen, onClose, onSelectCuddle }
               transition={{ delay: 0.6 }}
               className="text-xs text-gray-500"
             >
-              Don&apos;t worry - you can always change your companion later! 💜
+              Don't worry - you can always change your companion later! 💜
             </motion.div>
           </>
         )}

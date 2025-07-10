@@ -213,7 +213,7 @@ export default function Home() {
               transition={{ delay: 0.4 }}
               className="text-5xl lg:text-7xl font-bold text-gray-800 mb-6 leading-tight text-center"
             >
-              Let&apos;s{" "}
+              Let's{" "}
               <span className="text-primary relative">
                 untangle
                 <div className="absolute -bottom-2 left-0 w-full h-1 bg-gradient-to-r from-primary/40 to-primary/20 rounded-full"></div>

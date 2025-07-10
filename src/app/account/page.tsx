@@ -354,7 +354,7 @@ export default function Account() {
           className="mb-8 text-center"
         >
           <p className="text-lg text-primary/80 italic">
-            &ldquo;Eighty percent of success is showing up.&rdquo;
+           Eighty percent of success is showing up.
           </p>
           <p className="text-sm text-primary/60 mt-2">
             - Woody Allen

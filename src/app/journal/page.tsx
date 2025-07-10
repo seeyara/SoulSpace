@@ -120,90 +120,92 @@ function JournalContent() {
     setIsInitialLoad(false);
   }, [messages, isInitialLoad]);
 
+  // Add logging for key state changes
   useEffect(() => {
+    console.log('userId changed:', userId);
+  }, [userId]);
+  useEffect(() => {
+    console.log('selectedCuddle changed:', selectedCuddle);
+  }, [selectedCuddle]);
+  useEffect(() => {
+    console.log('selectedDate changed:', selectedDate);
+  }, [selectedDate]);
+  useEffect(() => {
+    console.log('showPrivacyModal changed:', showPrivacyModal);
+  }, [showPrivacyModal]);
+
+  // Main chat history fetch effect with logging
+  useEffect(() => {
+    console.log('Fetching chat history with:', { userId, selectedCuddle, selectedDate, showPrivacyModal });
     const fetchChatHistory = async () => {
       const storedUserId = storage.getUserId();
       if (!storedUserId) {
         // Don't start conversation yet if no user ID (wait for privacy modal)
         return;
       }
-
       try {
         const response = await fetch(`/api/chat?userId=${storedUserId}&date=${selectedDate}&page=1`);
         const { data } = await response.json();
-
         if (data?.messages && data.messages.length > 0) {
-          // Check if the last message is already the welcome back message
-          const hasWelcomeBack = data.messages.some((msg: { role: 'user' | 'assistant'; content: string }) =>
-            msg.role === 'assistant' &&
-            msg.content === WELCOME_BACK_MESSAGE
-          );
-
+          // Returning user: Entry exists for today
           setMessages(data.messages);
           setHasMoreMessages(data.hasMore);
           setPage(1);
-
-          // Only add welcome back message if we're not in free-form mode and don't already have it
-          if (!hasWelcomeBack && journalingMode !== 'free-form') {
-            // Add continuation message after loading chat history
-            setTimeout(() => {
-              setIsTyping(true);
-              setTimeout(() => {
-                setMessages(prev => [...prev, {
-                  role: 'assistant',
-                  content: WELCOME_BACK_MESSAGE
-                }]);
-                setIsTyping(false);
-                setIsWelcomeBack(true);
-                setShowInput(true);
-              }, 1500);
-            }, 1000);
-          } else if (hasWelcomeBack) {
-            setIsWelcomeBack(true);
-            setShowInput(true);
-          }
+          setIsWelcomeBack(true);
+          setShowInput(true);
+          setShowSuggestedReplies(false);
+          setJournalingMode(null);
+          console.log('Loaded previous messages:', data.messages);
         } else {
-          // Check if this is a new user (has temp_session_id) before starting conversation
-          const { data: userData } = await supabase
-            .from('users')
-            .select('temp_session_id')
-            .eq('id', storedUserId)
-            .single();
-          
-          // Only start conversation if user is not new (no temp_session_id) or privacy modal is closed
-          if (!userData?.temp_session_id || !showPrivacyModal) {
+          // New user or no entry for today
           const cuddle = cuddleData.cuddles[selectedCuddle];
           setIsTyping(true);
           setTimeout(() => {
-            setMessages([{
-              role: 'assistant',
-                content: `${cuddle.intro}\n\nHow would you like to journal today?`
-            }]);
+            setMessages([
+              {
+                role: 'assistant',
+                content: `Hi! I’m ${getCuddleName(selectedCuddle)}. I’m here to listen. Let’s journal together today.`
+              },
+              {
+                role: 'assistant',
+                content: 'Would you like to journal freely or follow a guided session today?'
+              }
+            ]);
             setIsTyping(false);
-              setShowSuggestedReplies(true);
+            setShowSuggestedReplies(true);
+            setIsWelcomeBack(false);
+            setShowInput(false);
+            setJournalingMode(null);
+            console.log('Started new user flow');
           }, 1000);
-          }
         }
       } catch (error) {
         console.error('Error fetching chat history:', error);
-        // Only start a new conversation on error if privacy modal is closed
-        if (!showPrivacyModal) {
+        // Fallback to new user flow
         const cuddle = cuddleData.cuddles[selectedCuddle];
         setIsTyping(true);
         setTimeout(() => {
-          setMessages([{
-            role: 'assistant',
-              content: `${cuddle.intro}\n\nHow would you like to journal today?`
-          }]);
+          setMessages([
+            {
+              role: 'assistant',
+              content: `Hi! I’m ${getCuddleName(selectedCuddle)}. I’m here to listen. Let’s journal together today.`
+            },
+            {
+              role: 'assistant',
+              content: 'Would you like to journal freely or follow a guided session today?'
+            }
+          ]);
           setIsTyping(false);
-            setShowSuggestedReplies(true);
+          setShowSuggestedReplies(true);
+          setIsWelcomeBack(false);
+          setShowInput(false);
+          setJournalingMode(null);
+          console.log('Started new user flow (error fallback)');
         }, 1000);
-        }
       }
     };
-
     fetchChatHistory();
-  }, [selectedCuddle, selectedDate, userId, journalingMode, showPrivacyModal]);
+  }, [selectedCuddle, selectedDate, userId, showPrivacyModal]);
 
   // Separate effect to handle privacy modal state changes
   useEffect(() => {
@@ -468,6 +470,7 @@ function JournalContent() {
     }
   };
 
+  // Update handleModeSelection to always append prompts
   const handleModeSelection = (mode: 'guided' | 'free-form') => {
     gaEvent({
       action: 'guided_or_free_choice',
@@ -477,20 +480,23 @@ function JournalContent() {
     });
     setJournalingMode(mode);
     setShowSuggestedReplies(false);
-    
+    setIsWelcomeBack(false);
     if (mode === 'guided') {
-      // Show a prompt first for guided journaling
+      // Append the guided journaling prompt
       setIsTyping(true);
       setTimeout(() => {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: "What's on your mind today?"
-        }]);
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: "What's on your mind today?"
+          }
+        ]);
         setIsTyping(false);
         setShowInput(true);
       }, 1000);
     } else {
-      // Show free-form journaling interface immediately
+      // Free journaling: just show the input, don't clear previous messages
       setShowInput(true);
     }
   };
@@ -768,6 +774,9 @@ function JournalContent() {
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
             </div>
           )}
+          {isWelcomeBack && messages.length > 0 && (
+            <div className="mb-4 text-primary font-medium text-lg">Here’s what you shared earlier today…</div>
+          )}
           <AnimatePresence>
             {messages.map((message, index) => {
               const isLastAssistantMessage = message.role === 'assistant' &&
@@ -899,7 +908,7 @@ function JournalContent() {
                       onClick={handleFinishEntry}
                       className="text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
                     >
-                      End chat
+                      End conversation
                     </button>
                     <button
                       onClick={handleContinue}
@@ -951,7 +960,7 @@ function JournalContent() {
                         onClick={handleFinishEntry}
                         className="text-primary/70 border-2 border-primary/20 px-2 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
                       >
-                        End chat
+                        End conversation
                       </button>
                       <button
                         type="submit"

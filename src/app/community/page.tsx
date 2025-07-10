@@ -204,7 +204,7 @@ export default function Community() {
           <>
             <h2 className="text-2xl font-semibold text-white mb-2">Your invite is on its way! ✨</h2>
             <p className="text-gray-200 text-center max-w-sm px-4 mb-6">
-              You&apos;ll soon get access to the exclusive Whispr Community
+              You'll soon get access to the exclusive Whispr Community
             </p>
           </>
         ) : (

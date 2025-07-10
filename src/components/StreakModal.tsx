@@ -144,7 +144,7 @@ export default function StreakModal({ isOpen, onClose, userId }: StreakModalProp
             transition={{ delay: 0.3 }}
             className="text-2xl font-semibold text-gray-900"
           >
-            ✨ You&apos;re a Star! ✨
+            ✨ You're a Star! ✨
           </motion.h3>
 
           {/* Calendar Section */}
@@ -269,7 +269,7 @@ export default function StreakModal({ isOpen, onClose, userId }: StreakModalProp
               className="text-center"
             >
               <p className="text-green-600 font-medium text-lg">
-                Amazing! We&apos;ll send you gentle reminders! ✨
+                Amazing! We'll send you gentle reminders! ✨
               </p>
               <motion.button
                 initial={{ opacity: 0 }}

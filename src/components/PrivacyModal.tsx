@@ -142,7 +142,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
                 </svg>
                 Back
               </button>
-              <button onClick={() => setStep('cuddle')} className="bg-primary text-white px-8 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors flex-1">Let&apos;s go! →</button>
+              <button onClick={() => setStep('cuddle')} className="bg-primary text-white px-8 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors flex-1">Let's go! →</button>
             </div>
           </>
         )}
@@ -156,7 +156,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
               <button onClick={() => { handleProfileChange('cuddleOwnership', 'not-yet'); setStep('gender'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.cuddleOwnership === 'not-yet' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>No, not yet</button>
               <button onClick={() => { handleProfileChange('cuddleOwnership', 'gifted'); setStep('gender'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.cuddleOwnership === 'gifted' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>I gifted it to someone</button>
                   </div>
-            <p className="text-xs text-primary/60 mt-2">(Whichever you pick, you&apos;re welcome here!)</p>
+            <p className="text-xs text-primary/60 mt-2">(Whichever you pick, you're welcome here!)</p>
             <button onClick={handleBack} className="flex items-center justify-center gap-2 text-primary/70 border-2 border-primary/20 px-6 py-2 rounded-xl font-medium hover:bg-primary/5 transition-colors w-full mt-4">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -169,7 +169,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
         {step === 'gender' && (
           <>
             <h3 className="text-2xl font-semibold text-gray-900">How do you vibe? 🌈</h3>
-            <p className="text-gray-600 text-base">If you&apos;re comfy sharing, how do you identify? </p>
+            <p className="text-gray-600 text-base">If you're comfy sharing, how do you identify? </p>
             <div className="flex flex-col gap-3 mt-4">
               <button onClick={() => { handleProfileChange('gender', 'woman'); setStep('lifeStage'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.gender === 'woman' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>Woman</button>
               <button onClick={() => { handleProfileChange('gender', 'man'); setStep('lifeStage'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.gender === 'man' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>Man</button>
@@ -189,7 +189,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
         {step === 'lifeStage' && (
           <>
             <h3 className="text-2xl font-semibold text-gray-900">Where are you at in life? 🎒</h3>
-            <p className="text-gray-600 text-base">Pick the one that feels right — we&apos;re all on our own journey!</p>
+            <p className="text-gray-600 text-base">Pick the one that feels right — we're all on our own journey!</p>
             <div className="flex flex-col gap-3 mt-4">
               <button onClick={() => { handleProfileChange('lifeStage', 'school'); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'school' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>In school</button>
               <button onClick={() => { handleProfileChange('lifeStage', 'college'); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'college' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>College student</button>
@@ -224,7 +224,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
                   disabled={!isProfileComplete || isSubmitting}
                 className="bg-primary text-white px-8 py-3 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors flex-1"
                 >
-                {isSubmitting ? "Setting up your space... ✨" : "Let&apos;s begin journaling →"}
+                {isSubmitting ? "Setting up your space... ✨" : "Let's begin journaling →"}
                 </button>
             </div>
             </>

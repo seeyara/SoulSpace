@@ -134,7 +134,7 @@ export default function CommunityAccessModal({ isOpen, onClose, userId }: Commun
                 Your invite is on its way! ✨
               </h3>
               <p className="text-green-600 mb-6">
-                You&apos;ll soon get access to the exclusive Whispr Community
+                You'll soon get access to the exclusive Whispr Community
               </p>
               <motion.button
                 initial={{ opacity: 0 }}

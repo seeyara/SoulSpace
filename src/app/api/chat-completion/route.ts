@@ -22,6 +22,7 @@ return `RULES: You are Whispr, a companion. Think like a best friend who's been 
 ${age && gender ? `The person you are talking to is a ${age} year old ${gender} living in ${city}.` : ''}
 Frame your responses in a way that is relevant to the user's age, gender living in an Indian city
 If they talk about anything related to Suicide, self harm or harming someone else immediately ask them to reach out to a professional. Do not support them in any way.
+If they ask about anything else like coding or sexual conversations, just say you are not comfortable and dont engage.
 
 RESPONSE STRUCTURE: Always respond with TWO separate messages which are 1 sentence each to address:
 
@@ -36,11 +37,8 @@ MESSAGE 2 - COMPANIONSHIP & PRACTICAL SUPPORT:
 - Examples:
   * "I feel overwhelmed" → "What's on your plate right now?" (first time)
   * "Too many work deadlines" → "Let's break this down - what's the most urgent deadline?" (solution-focused)
-  * "Its task 1" -> "This is how i can help you with that, whats task 2"
-
-IMPORTANT: Format your response exactly like this:
-Message1: [your first message here]
-Message2: [your second message here], end with a gentle question to keep conversation going
+  * "Its task 1" -> "This is how I can help you with that, whats task 2"
+- End with a gentle question to keep conversation going
 
 Keep responses conversational, warm, and companion-like. You're their friend through the mess of life, using one emoji per response to reduce words`;
 };
@@ -166,35 +164,24 @@ export async function POST(request: Request) {
     console.log('Usage:', completion.usage);
     console.log('Finish Reason:', completion.choices[0].finish_reason);
 
-    // Parse the response using explicit Message1 and Message2 markers
-    const responseMessages = ['', ''];
+    // Split the AI response into sentences and send as multiple messages
+    const sentences = aiResponse
+      .split(/[.!?]+/)
+      .map(sentence => sentence.trim())
+      .filter(sentence => sentence.length > 0);
     
-    // Try to extract Message1 and Message2 using the explicit format
-    const message1Match = aiResponse.match(/Message1:\s*([\s\S]*?)(?=\s*Message2:|$)/);
-    const message2Match = aiResponse.match(/Message2:\s*([\s\S]*?)$/);
+    // If we have sentences, use them; otherwise use the original response
+    const responseMessages = sentences.length > 0 ? sentences : [aiResponse.trim()];
     
-    if (message1Match && message2Match) {
-      // Successfully parsed both messages
-      responseMessages[0] = message1Match[1].trim();
-      responseMessages[1] = message2Match[1].trim();
-    } else if (message1Match) {
-      // Only Message1 found, create a simple follow-up for Message2
-      responseMessages[0] = message1Match[1].trim();
-      responseMessages[1] = "What's on your mind right now?";
-    } else {
-      // Fallback: treat the entire response as Message1 and create a simple Message2
-      responseMessages[0] = aiResponse.trim();
-      responseMessages[1] = "How are you feeling about that?";
-    }
-
-    const finalResponse = responseMessages[0] + '\n\n' + responseMessages[1];
+    const finalResponse = responseMessages.join('\n\n');
 
     // Log final processed response
     console.log('=== FINAL PROCESSED RESPONSE ===');
-    console.log('Message 1:', responseMessages[0]);
-    console.log('Message 1 Length:', responseMessages[0].length);
-    console.log('Message 2:', responseMessages[1]);
-    console.log('Message 2 Length:', responseMessages[1].length);
+    console.log('Number of Sentences:', responseMessages.length);
+    responseMessages.forEach((message, index) => {
+      console.log(`Sentence ${index + 1}:`, message);
+      console.log(`Sentence ${index + 1} Length:`, message.length);
+    });
     console.log('Final Response Length:', finalResponse.length);
     console.log('Should End:', false);
     console.log('=== END LOG ===\n');

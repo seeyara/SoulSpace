@@ -17,7 +17,7 @@ export async function POST(request: Request) {
         user_id: userId,
         messages: messages,
         cuddle_id: cuddleId
-      });
+      }, { onConflict: 'user_id,date' });
 
     if (error) throw error;
 
@@ -105,15 +105,11 @@ export async function GET(request: Request) {
 
     if (data) {
       const allMessages = data.messages;
-      const startIndex = Math.max(0, allMessages.length - (page * MESSAGES_PER_PAGE));
-      const endIndex = Math.max(0, allMessages.length - ((page - 1) * MESSAGES_PER_PAGE));
-      const paginatedMessages = allMessages.slice(startIndex, endIndex);
-
       return NextResponse.json({ 
         data: {
-          messages: paginatedMessages,
+          messages: allMessages,
           cuddleId: data.cuddle_id,
-          hasMore: startIndex > 0
+          hasMore: false
         }
       });
     }
