@@ -11,6 +11,14 @@ if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+// Get environment prefix for table names
+export const SUPABASE_ENV_PREFIX = process.env.NEXT_PUBLIC_SUPABASE_ENV_PREFIX || '';
+
+// Helper to prefix table names
+export function prefixedTable(table: string) {
+  return SUPABASE_ENV_PREFIX ? `${SUPABASE_ENV_PREFIX}-${table}` : table;
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export type JournalEntry = {

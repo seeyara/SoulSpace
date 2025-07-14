@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, prefixedTable } from '@/lib/supabase';
 
 export async function POST(request: Request) {
   try {
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
     // Create or update user
     const { data, error } = await supabase
-      .from('users')
+      .from(prefixedTable('users'))
       .upsert(updateData)
       .select()
       .single();

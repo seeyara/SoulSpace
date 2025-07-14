@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, prefixedTable } from '@/lib/supabase';
 import { format, subDays } from 'date-fns';
 
 interface StreakModalProps {
@@ -39,7 +39,7 @@ export default function StreakModal({ isOpen, onClose, userId }: StreakModalProp
 
       try {
         const { data, error } = await supabase
-          .from('chats')
+          .from(prefixedTable('chats'))
           .select('date')
           .eq('user_id', userId)
           .in('date', datesArray.map(d => d.date));

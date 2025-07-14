@@ -156,6 +156,13 @@ function JournalContent() {
           setShowSuggestedReplies(false);
           setJournalingMode(null);
           console.log('Loaded previous messages:', data.messages);
+
+          // Add welcome back message and suggested replies
+          setMessages(prev => [
+            ...data.messages,
+            { role: 'assistant', content: WELCOME_BACK_MESSAGE }
+          ]);
+          setShowSuggestedReplies(true);
         } else {
           // New user or no entry for today
           const cuddle = cuddleData.cuddles[selectedCuddle];
@@ -164,18 +171,18 @@ function JournalContent() {
             setMessages([
               {
                 role: 'assistant',
-                content: `Hi! I’m ${getCuddleName(selectedCuddle)}. I’m here to listen. Let’s journal together today.`
+                content: `Hi! I’m ${getCuddleName(selectedCuddle)}, I'm always here when your mind feels a little too full. Let's take it slow and gently sort through your thoughts together..`
               },
               {
                 role: 'assistant',
-                content: 'Would you like to journal freely or follow a guided session today?'
+                content: "What's on your mind today?"
               }
             ]);
             setIsTyping(false);
-            setShowSuggestedReplies(true);
+            setShowSuggestedReplies(false);
             setIsWelcomeBack(false);
-            setShowInput(false);
-            setJournalingMode(null);
+            setShowInput(true);
+            setJournalingMode('guided');
             console.log('Started new user flow');
           }, 1000);
         }
@@ -192,14 +199,14 @@ function JournalContent() {
             },
             {
               role: 'assistant',
-              content: 'Would you like to journal freely or follow a guided session today?'
+              content: "What's on your mind today?"
             }
           ]);
           setIsTyping(false);
-          setShowSuggestedReplies(true);
+          setShowSuggestedReplies(false);
           setIsWelcomeBack(false);
-          setShowInput(false);
-          setJournalingMode(null);
+          setShowInput(true);
+          setJournalingMode('guided');
           console.log('Started new user flow (error fallback)');
         }, 1000);
       }
@@ -228,10 +235,9 @@ function JournalContent() {
               setTimeout(() => {
                 setMessages([{
                   role: 'assistant',
-                  content: `${cuddle.intro}\n\nHow would you like to journal today?`
+                  content: `${cuddle.intro}`
                 }]);
                 setIsTyping(false);
-                setShowSuggestedReplies(true);
               }, 1000);
             }
           } catch (error) {
@@ -302,12 +308,18 @@ function JournalContent() {
       // Get user profile from localStorage
       const userProfile = storage.getUserProfile();
 
+      // Skip the first two assistant intro messages when sending to OpenAI
+      let messageHistoryToSend = messages;
+      if (messages.length > 2 && messages[0].role === 'assistant' && messages[1].role === 'assistant') {
+        messageHistoryToSend = messages.slice(2);
+      }
+
       let response;
       try {
          response = await axios.post('/api/chat-completion', {
           message: userMessage.content,
           cuddleId: selectedCuddle,
-          messageHistory: messages
+          messageHistory: messageHistoryToSend
          },{
           headers: {
             'Content-Type': 'application/json',
@@ -338,57 +350,41 @@ function JournalContent() {
         content: firstMessage
       };
 
-      const updatedMessagesWithFirst = [...messages, userMessage, firstAssistantMessage];
-      
-      // Batch state updates for first message
-      setIsTyping(false);
-      setMessages(updatedMessagesWithFirst);
-
-      // Add the second message after a short delay for natural flow
+      // If there is a second message, add it as a separate assistant message
       if (secondMessage) {
-        setTimeout(() => {
-          setIsTyping(true);
-          setTimeout(() => {
-            const secondAssistantMessage = {
-              role: 'assistant' as const,
-              content: secondMessage
-            };
-            const finalMessages = [...updatedMessagesWithFirst, secondAssistantMessage];
-            
-            // Batch state updates for final messages
-            setIsTyping(false);
-            setMessages(finalMessages);
-
-            // Save to localStorage
-            storage.setOngoingConversation({
-              messages: finalMessages,
-              cuddle: selectedCuddle
-            });
-
-            if (shouldEnd) {
-              setTimeout(() => {
-                setShowStreakModal(true);
-              }, 1500);
-              return;
-            }
-
-            setShowInput(true);
-          }, 1000); // 1 second typing delay for second message
-        }, 500); // 0.5 second delay before starting second message
-      } else {
-        // If no second message, just save and continue
+        const secondAssistantMessage = {
+          role: 'assistant' as const,
+          content: secondMessage
+        };
+        const finalMessages = [...messages, userMessage, firstAssistantMessage, secondAssistantMessage];
+        setIsTyping(false);
+        setMessages(finalMessages);
         storage.setOngoingConversation({
-          messages: updatedMessagesWithFirst,
+          messages: finalMessages,
           cuddle: selectedCuddle
         });
-
         if (shouldEnd) {
           setTimeout(() => {
             setShowStreakModal(true);
           }, 1500);
           return;
         }
-
+        setShowInput(true);
+      } else {
+        // Only one message from AI
+        const updatedMessagesWithFirst = [...messages, userMessage, firstAssistantMessage];
+        setIsTyping(false);
+        setMessages(updatedMessagesWithFirst);
+        storage.setOngoingConversation({
+          messages: updatedMessagesWithFirst,
+          cuddle: selectedCuddle
+        });
+        if (shouldEnd) {
+          setTimeout(() => {
+            setShowStreakModal(true);
+          }, 1500);
+          return;
+        }
         setShowInput(true);
       }
     } catch (error) {
@@ -470,36 +466,9 @@ function JournalContent() {
     }
   };
 
-  // Update handleModeSelection to always append prompts
-  const handleModeSelection = (mode: 'guided' | 'free-form') => {
-    gaEvent({
-      action: 'guided_or_free_choice',
-      category: 'journal',
-      label: mode,
-      value: selectedCuddle,
-    });
-    setJournalingMode(mode);
-    setShowSuggestedReplies(false);
-    setIsWelcomeBack(false);
-    if (mode === 'guided') {
-      // Append the guided journaling prompt
-      setIsTyping(true);
-      setTimeout(() => {
-        setMessages(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: "What's on your mind today?"
-          }
-        ]);
-        setIsTyping(false);
-        setShowInput(true);
-      }, 1000);
-    } else {
-      // Free journaling: just show the input, don't clear previous messages
-      setShowInput(true);
-    }
-  };
+  // Remove all UI and logic related to mode selection and suggested replies
+  // Remove handleModeSelection and showSuggestedReplies logic
+  // Remove the button for guided journaling in the chat area
 
   const handleCloseStreakModal = () => {
     setShowStreakModal(false);
@@ -738,6 +707,43 @@ function JournalContent() {
     };
   }, [journalingMode, freeFormContent, messages, selectedCuddle, selectedDate]);
 
+  // Helper to check if user profile is complete
+  const isProfileComplete = (profile: any) => {
+    return profile && profile.cuddleOwnership && profile.gender && profile.lifeStage;
+  };
+
+  // Show PrivacyModal until profile is complete
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const profileStr = localStorage.getItem('user_profile');
+      let profile = null;
+      try {
+        profile = profileStr ? JSON.parse(profileStr) : null;
+      } catch {}
+      if (!isProfileComplete(profile)) {
+        setShowPrivacyModal(true);
+      } else {
+        setShowPrivacyModal(false);
+      }
+    }
+  }, []);
+
+  // When PrivacyModal closes, re-check profile completeness
+  const handlePrivacyModalClose = () => {
+    if (typeof window !== 'undefined') {
+      const profileStr = localStorage.getItem('user_profile');
+      let profile = null;
+      try {
+        profile = profileStr ? JSON.parse(profileStr) : null;
+      } catch {}
+      if (!isProfileComplete(profile)) {
+        setShowPrivacyModal(true);
+      } else {
+        setShowPrivacyModal(false);
+      }
+    }
+  };
+
   return (
     <main className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -836,22 +842,23 @@ function JournalContent() {
                           {getDisplayCuddleName(selectedCuddle)} 💭
                         </span>
                       )}
-                      {isLastAssistantMessage && showSuggestedReplies && !journalingMode && (
-                        <div className="mt-3">
-                          <div className="flex flex-col gap-2 w-full">
-                            <button
-                              onClick={() => handleModeSelection('guided')}
-                              className="bg-primary text-white w-full whitespace-nowrap px-4 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors text-base"
-                            >
-                              💬 Guided Journaling
-                            </button>
-                            <button
-                              onClick={() => handleModeSelection('free-form')}
-                              className="bg-primary text-white w-full whitespace-nowrap px-4 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors text-base"
-                            >
-                              ✍️ Free Journaling
-                            </button>
-                          </div>
+                      {/* Show suggested replies only if not welcome back message and not in journaling mode */}
+                      {/* Mode selection and suggested replies removed */}
+                      {/* Show Continue/End chat only for welcome back message */}
+                      {isLastAssistantMessage && message.content === WELCOME_BACK_MESSAGE && (
+                        <div className="mt-3 flex flex-row gap-4 w-full">
+                          <button
+                            onClick={handleFinishEntry}
+                            className="text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-2xl font-medium hover:bg-primary/5 transition-colors flex-1"
+                          >
+                            End chat
+                          </button>
+                          <button
+                            onClick={handleContinue}
+                            className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors flex-1"
+                          >
+                            Continue
+                          </button>
                         </div>
                       )}
                     </div>
@@ -908,7 +915,7 @@ function JournalContent() {
                       onClick={handleFinishEntry}
                       className="text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
                     >
-                      End conversation
+                      End chat
                     </button>
                     <button
                       onClick={handleContinue}
@@ -960,7 +967,7 @@ function JournalContent() {
                         onClick={handleFinishEntry}
                         className="text-primary/70 border-2 border-primary/20 px-2 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
                       >
-                        End conversation
+                        End chat
                       </button>
                       <button
                         type="submit"
@@ -987,7 +994,7 @@ function JournalContent() {
 
       <PrivacyModal
         isOpen={showPrivacyModal}
-        onClose={() => setShowPrivacyModal(false)}
+        onClose={handlePrivacyModalClose}
       />
     </main>
   );

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, prefixedTable } from '@/lib/supabase';
 
 export async function POST(request: Request) {
   try {
@@ -12,15 +12,18 @@ export async function POST(request: Request) {
       );
     }
 
+    // Clean and validate userId - remove any extra quotes or whitespace
+    const cleanUserId = userId.toString().trim().replace(/^"+|"+$/g, '');
+
     // Update user profile in Supabase
     const { data, error } = await supabase
-      .from('users')
+      .from(prefixedTable('users'))
       .update({
         age: profile.age,
         gender: profile.gender,
         city: profile.city
       })
-      .eq('id', userId)
+      .eq('id', cleanUserId)
       .select();
 
     if (error) {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, prefixedTable } from '@/lib/supabase';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
 
   try {
     const { data: repliesData, error } = await supabase
-      .from('community_replies')
+      .from(prefixedTable('community_replies'))
       .select(`
         id,
         content,
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     let likedReplyIds = new Set();
     if (userId) {
       const { data: userLikes } = await supabase
-        .from('community_likes')
+        .from(prefixedTable('community_likes'))
         .select('reply_id')
         .eq('user_id', userId);
 
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     const userName = userData?.name || 'Username';
 
     const { data: reply, error } = await supabase
-      .from('community_replies')
+      .from(prefixedTable('community_replies'))
       .insert({
         question_id: questionId,
         content,

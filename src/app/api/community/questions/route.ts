@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, prefixedTable } from '@/lib/supabase';
 
 export async function GET() {
   try {
     const { data: questionsData, error } = await supabase
-      .from('community_questions')
+      .from(prefixedTable('community_questions'))
       .select(`
         id,
         question,

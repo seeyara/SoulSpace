@@ -1,23 +1,11 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { format } from 'date-fns';
-
-const MESSAGES_PER_PAGE = 5;
+import { saveChatMessage, fetchUnfinishedEntry, fetchChatHistory } from '@/lib/utils/chatUtils';
 
 // Save chat messages
 export async function POST(request: Request) {
   try {
     const { messages, userId, cuddleId } = await request.json();
-    const today = format(new Date(), 'yyyy-MM-dd');
-
-    const { data, error } = await supabase
-      .from('chats')
-      .upsert({
-        date: today,
-        user_id: userId,
-        messages: messages,
-        cuddle_id: cuddleId
-      }, { onConflict: 'user_id,date' });
+    const { data, error } = await saveChatMessage({ messages, userId, cuddleId });
 
     if (error) throw error;
 
@@ -37,7 +25,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const date = searchParams.get('date');
-    const page = parseInt(searchParams.get('page') || '1');
+    // const page = parseInt(searchParams.get('page') || '1');
     const unfinished = searchParams.get('unfinished');
 
     if (!userId) {
@@ -50,33 +38,10 @@ export async function GET(request: Request) {
     // Handle unfinished parameter
     if (unfinished === '1') {
       try {
-        const { data, error } = await supabase
-          .from('chats')
-          .select('messages, cuddle_id')
-          .eq('user_id', userId)
-          .order('date', { ascending: false })
-          .limit(1)
-          .single();
-
-        if (error && error.code !== 'PGRST116') {
-          throw error;
+        const unfinishedData = await fetchUnfinishedEntry(userId);
+        if (unfinishedData) {
+          return NextResponse.json({ data: unfinishedData });
         }
-
-        if (data && data.messages && data.messages.length > 0) {
-          const lastMessage = data.messages[data.messages.length - 1];
-          // Check if the last message is from the user (indicating an unfinished conversation)
-          if (lastMessage.role === 'user') {
-            return NextResponse.json({
-              data: {
-                lastUnfinished: {
-                  mode: 'guided',
-                  content: lastMessage.content
-                }
-              }
-            });
-          }
-        }
-
         return NextResponse.json({ data: null });
       } catch (error) {
         console.error('Error fetching unfinished entry:', error);
@@ -92,28 +57,10 @@ export async function GET(request: Request) {
       );
     }
 
-    const { data, error } = await supabase
-      .from('chats')
-      .select('messages, cuddle_id')
-      .eq('user_id', userId)
-      .eq('date', date)
-      .single();
-
-    if (error && error.code !== 'PGRST116') { // PGRST116 is the "not found" error code
-      throw error;
+    const chatData = await fetchChatHistory(userId, date);
+    if (chatData) {
+      return NextResponse.json({ data: chatData });
     }
-
-    if (data) {
-      const allMessages = data.messages;
-      return NextResponse.json({ 
-        data: {
-          messages: allMessages,
-          cuddleId: data.cuddle_id,
-          hasMore: false
-        }
-      });
-    }
-
     return NextResponse.json({ data: null });
   } catch (error) {
     console.error('Error fetching chat:', error);
