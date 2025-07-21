@@ -41,7 +41,7 @@ export async function GET(request: Request) {
         const unfinishedData = await fetchUnfinishedEntry(userId);
         if (unfinishedData) {
           return NextResponse.json({ data: unfinishedData });
-        }
+          }
         return NextResponse.json({ data: null });
       } catch (error) {
         console.error('Error fetching unfinished entry:', error);

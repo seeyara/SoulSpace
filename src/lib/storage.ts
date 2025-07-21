@@ -15,6 +15,7 @@ export interface UserProfile {
   name?: string;
   age?: number;
   interests?: string[];
+  lifestage?: string;
   [key: string]: string | number | string[] | undefined;
 }
 
@@ -113,7 +114,13 @@ class StorageManager {
 
   // User profile methods
   getUserProfile(): UserProfile | null {
-    return this.get<UserProfile>(STORAGE_KEYS.USER_PROFILE);
+    const profile = this.get<UserProfile>(STORAGE_KEYS.USER_PROFILE);
+    if (!profile) return null;
+    // Ensure lifestage is always present
+    if (!('lifestage' in profile)) {
+      profile.lifestage = '';
+    }
+    return profile;
   }
 
   setUserProfile(profile: UserProfile): boolean {

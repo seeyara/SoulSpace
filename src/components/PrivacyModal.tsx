@@ -16,7 +16,7 @@ interface UserProfile {
 }
 
 export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
-  const [step, setStep] = useState<'privacy' | 'welcome' | 'cuddle' | 'gender' | 'lifeStage' | 'done'>('privacy');
+  const [step, setStep] = useState<'privacy' | 'cuddle' | 'gender' | 'lifeStage' | 'done'>('privacy');
   const [profile, setProfile] = useState<UserProfile>({
     cuddleOwnership: '',
     gender: '',
@@ -35,11 +35,8 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
 
   const handleBack = () => {
     switch (step) {
-      case 'welcome':
-        setStep('privacy');
-        break;
       case 'cuddle':
-        setStep('welcome');
+        setStep('privacy');
         break;
       case 'gender':
         setStep('cuddle');
@@ -97,7 +94,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
 
         {/* Stepper */}
         <div className="flex justify-center gap-2 mb-2">
-          {["privacy", "welcome", "cuddle", "gender", "lifeStage", "done"].map((s) => (
+          {["privacy", "cuddle", "gender", "lifeStage", "done"].map((s) => (
             <span key={s} className={`w-2 h-2 rounded-full ${step === s ? 'bg-primary' : 'bg-primary/20'}`}></span>
           ))}
         </div>
@@ -126,32 +123,16 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
                 </div>
               </div>
             </motion.div>
+            <p className="text-xs text-primary/60 mt-2">Before we continue, please help us with a few details so we can personalise your experience</p>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-              <button onClick={() => setStep('welcome')} className="bg-primary text-white px-8 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors w-full">Continue</button>
+              <button onClick={() => setStep('cuddle')} className="bg-primary text-white px-8 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors w-full">Continue</button>
             </motion.div>
-          </>
-        )}
-
-        {step === 'welcome' && (
-          <>
-            <h3 className="text-2xl font-semibold text-gray-900">Hey hey! 👋</h3>
-            <p className="text-gray-600 text-base">Welcome to Whispr, your safe space to share, reflect, and just be yourself.<br />Before we start, can we ask you a couple of questions? No stress — it just helps us make your journaling experience tailored to you :)</p>
-            <div className="flex gap-3">
-              <button onClick={handleBack} className="flex items-center gap-2 text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-xl font-medium hover:bg-primary/5 transition-colors">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Back
-              </button>
-              <button onClick={() => setStep('cuddle')} className="bg-primary text-white px-8 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors flex-1">Let's go! →</button>
-            </div>
           </>
         )}
 
         {step === 'cuddle' && (
           <>
-            <h3 className="text-2xl font-semibold text-gray-900">Do you have a Cuddle buddy yet? 🧸</h3>
-            <p className="text-gray-600 text-base">Just checking — have you bought a Cuddle before, or maybe gifted one to someone?</p>
+            <h3 className="text-2xl font-semibold text-gray-900">Do you have a Cuddle  yet? 🧸</h3>
             <div className="flex flex-col gap-3 mt-4">
               <button onClick={() => { handleProfileChange('cuddleOwnership', 'have'); setStep('gender'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.cuddleOwnership === 'have' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>Yes, I have one!</button>
               <button onClick={() => { handleProfileChange('cuddleOwnership', 'not-yet'); setStep('gender'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.cuddleOwnership === 'not-yet' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>No, not yet</button>
@@ -170,7 +151,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
         {step === 'gender' && (
           <>
             <h3 className="text-2xl font-semibold text-gray-900">How do you vibe? 🌈</h3>
-            <p className="text-gray-600 text-base">If you're comfy sharing, how do you identify? </p>
+            <p className="text-gray-600 text-base">If you're comfortable sharing, how do you identify? </p>
             <div className="flex flex-col gap-3 mt-4">
               <button onClick={() => { handleProfileChange('gender', 'woman'); setStep('lifeStage'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.gender === 'woman' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>Woman</button>
               <button onClick={() => { handleProfileChange('gender', 'man'); setStep('lifeStage'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.gender === 'man' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>Man</button>
@@ -194,7 +175,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
             <div className="flex flex-col gap-3 mt-4">
               <button onClick={() => { handleProfileChange('lifeStage', 'school'); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'school' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>In school</button>
               <button onClick={() => { handleProfileChange('lifeStage', 'college'); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'college' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>College</button>
-              <button onClick={() => { handleProfileChange('lifeStage', 'working'); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'career' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>Working</button>
+              <button onClick={() => { handleProfileChange('lifeStage', ''); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'career' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>Working/Career</button>
               <button onClick={() => { handleProfileChange('lifeStage', 'other'); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'other' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>Other</button>
             </div>
             <p className="text-xs text-primary/60 mt-2">(We ask so we can make Whispr feel more like <span className='italic'>you</span>.)</p>
@@ -209,8 +190,8 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
         {step === 'done' && (
           <>
             <h3 className="text-2xl font-semibold text-gray-900">All set! 🌻</h3>
-            <p className="text-gray-600 text-base">Thanks for sharing a bit about yourself.<br />Your Cuddle is ready to listen whenever you are.</p>
-            <p className="text-xs text-primary/60 mt-2">(You can always change these details later in your profile.)</p>
+            <p className="text-gray-600 text-base">Thanks for sharing a bit about yourself.<br />
+            Did you know - to personalise your experience you can actually name your Cuddle on your profile page.</p>
             <div className="flex gap-3 mt-4">
               <button onClick={handleBack} className="flex items-center gap-2 text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-xl font-medium hover:bg-primary/5 transition-colors">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

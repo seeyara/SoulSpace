@@ -2,19 +2,13 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import type { CuddleId } from '@/types/cuddles';
 import dotenv from 'dotenv';
-import { buildWhisprPrompt } from '@/lib/utils/buildwhisprprompt';
+import { buildWhisprPrompt } from '@/lib/utils/buildWhisprPrompt';
 
 dotenv.config();
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
-// Define interface for message structure
-interface ChatMessage {
-  role: string;
-  content: string;
-}
 
 export async function POST(request: Request) {
   try {

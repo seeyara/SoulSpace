@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
-import { cuddleData } from '@/data/cuddles';
+import { cuddleData, cuddleIntro } from '@/data/cuddles';
 import type { CuddleId } from '@/types/cuddles';
 import StreakModal from '@/components/StreakModal';
 import PrivacyModal from '@/components/PrivacyModal';
@@ -235,7 +235,7 @@ function JournalContent() {
               setTimeout(() => {
                 setMessages([{
                   role: 'assistant',
-                  content: `${cuddle.intro}`
+                  content: cuddleIntro.replace('{cuddle-name}', cuddle.name)
                 }]);
                 setIsTyping(false);
               }, 1000);
@@ -577,6 +577,7 @@ function JournalContent() {
   };
 
   const handleContinue = async () => {
+    console.log('[handleContinue] lastUnfinishedEntry:', lastUnfinishedEntry);
     gaEvent({
       action: 'continue_button',
       category: 'journal',
@@ -593,10 +594,11 @@ function JournalContent() {
       setShowInput(true);
       return;
     }
-    // If not, show mode selection
-    setJournalingMode(null);
+    // If not, always show input for guided journaling
+    setJournalingMode('guided');
     setIsTyping(false);
-    setShowSuggestedReplies(true);
+    setShowInput(true);
+    setShowSuggestedReplies(false);
   };
 
   // Add this effect to update the name in the database when finishing entry
