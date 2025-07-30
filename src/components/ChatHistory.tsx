@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { supabase } from '@/lib/supabase';
+import { prefixedTable, supabase } from '@/lib/supabase';
 
 interface Message {
   type: 'cuddle' | 'user';
@@ -24,7 +24,7 @@ export default function ChatHistory({ date, selectedCuddle, onStartJournaling }:
     const fetchChat = async () => {
       try {
         const { data: chat, error } = await supabase
-          .from('chats')
+          .from(prefixedTable('chats'))
           .select('messages')
           .eq('date', date)
           .single();

@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
-import { supabase } from '@/lib/supabase';
+import { supabase, prefixedTable } from '@/lib/supabase';
 
 interface CommunityAccessModalProps {
   isOpen: boolean;
@@ -30,7 +30,7 @@ export default function CommunityAccessModal({ isOpen, onClose, userId }: Commun
     try {
       // Update the user with email only
       const { error: updateError } = await supabase
-        .from('users')
+        .from(prefixedTable('users'))
         .update({ email })
         .eq('id', userId);
 

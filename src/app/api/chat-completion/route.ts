@@ -1,18 +1,35 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import type { CuddleId } from '@/types/cuddles';
-import dotenv from 'dotenv';
+import type { CuddleId } from '@/types/api';
+import { serverConfig } from '@/lib/config';
 import { buildWhisprPrompt } from '@/lib/utils/buildWhisprPrompt';
-
-dotenv.config();
+import { withRedisRateLimit } from '@/lib/withRedisRateLimit';
+import { withErrorHandler } from '@/lib/errors';
+import { ChatCompletionRequestSchema, validateRequestBody, type ChatMessage } from '@/lib/validation';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: serverConfig.openai.apiKey,
 });
 
-export async function POST(request: Request) {
-  try {
-    const { message, cuddleId, messageHistory, forceEnd } = await request.json();
+export const POST = withRedisRateLimit({
+  keyPrefix: 'guided',
+  limit: 10, // 10 requests per minute per user
+  window: 60,
+  getKey: (req) => {
+    // Use userId from body if available, else fallback to IP
+    try {
+      const body = req.body ? req.body : null;
+      if (body) {
+        const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+        if (parsed && parsed.userId) return parsed.userId;
+      }
+    } catch {}
+    return req.headers.get('x-user-id') || 'anonymous';
+  },
+})(withErrorHandler(async (request: Request) => {
+  const body = await request.json();
+  const validatedData = validateRequestBody(ChatCompletionRequestSchema)(body);
+  const { message, cuddleId, messageHistory, forceEnd } = validatedData;
     
     const exchangeCount = Math.floor((messageHistory.length - 2) / 2) + 1; // Subtract 2 for intro and first prompt
 
@@ -86,16 +103,23 @@ export async function POST(request: Request) {
     // Build the system prompt using the user profile
     const systemPrompt = buildWhisprPrompt(userProfile || {});
 
-    const openAiMessages = [
+    const openAiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt },
-      ...messageHistory.map((m: any) => ({ role: m.role, content: m.content })),
-      { role: 'user', content: message }
+      ...messageHistory.map((m: ChatMessage): OpenAI.Chat.Completions.ChatCompletionMessageParam => ({ 
+        role: m.role, 
+        content: m.content 
+      })),
+      { role: 'user', content: message! }
     ];
 
     // Log the complete request being sent to OpenAI
     console.log('=== OPENAI API REQUEST ===');
-    console.log('System Prompt Length:', openAiMessages[0].content.length);
-    console.log('System Prompt:', openAiMessages[0].content);
+    if (openAiMessages[0] && openAiMessages[0].content) {
+      console.log('System Prompt Length:', openAiMessages[0].content.length);
+      console.log('System Prompt:', openAiMessages[0].content);
+    } else {
+      console.log('System Prompt missing or has no content');
+    }
     console.log('Total Messages:', openAiMessages.length);
     console.log('Message History (last 3):', messageHistory.slice(-3));
     console.log('Temperature:', 0.5);
@@ -140,15 +164,4 @@ export async function POST(request: Request) {
       response: finalResponse,
       shouldEnd: false
     });
-  } catch (error) {
-    console.error('=== ERROR LOG ===');
-    console.error('Error in chat completion:', error);
-    console.error('Timestamp:', new Date().toISOString());
-    console.error('=== END ERROR LOG ===\n');
-    
-    return NextResponse.json(
-      { error: 'Failed to generate response' },
-      { status: 500 }
-    );
-  }
-} 
+})); 

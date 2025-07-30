@@ -4,12 +4,11 @@ import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { supabase, prefixedTable } from '@/lib/supabase';
 import { storage } from '@/lib/storage';
 import DateSelector from '@/components/DateSelector';
 import ChatHistoryModal from '@/components/ChatHistoryModal';
 import { Sparkles } from 'lucide-react';
-
 
 
 const cuddleAttributes = {
@@ -105,7 +104,7 @@ export default function Home() {
         if (!storedUserId) return;
         
         const { data, error } = await supabase
-          .from('users')
+          .from(prefixedTable('users'))
           .select('cuddle_id, cuddle_name')
           .eq('id', storedUserId)
           .single();
@@ -147,7 +146,7 @@ export default function Home() {
       return; // Don't open modal, they need to start journaling first
     }
     const { data: chatData, error } = await supabase
-      .from('chats')
+      .from(prefixedTable('chats'))
       .select('messages')
       .eq('date', date)
       .eq('user_id', storedUserId)

@@ -35,7 +35,7 @@ export const cuddlePrompts: string[] = [
   "When you feel stressed, what do you do — and what could help you manage it better?",
   "What’s a book, movie, or song that’s inspired you recently?",
   "What are your top three priorities in life right now?",
-  "Write about a skill you’d like to learn or develop.",
+  "What is a skill you've always wanted to learn or develop",
   "What’s something you’re looking forward to in the coming week?",
   "Describe a moment when you felt truly proud of yourself.",
   "What’s been lingering in the back of your mind that you haven’t gotten around to yet?",

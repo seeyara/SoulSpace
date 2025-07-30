@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from 'next/font/local';
 import "./globals.css";
 import BottomNav from '@/components/BottomNav';
+import GlobalAccessModal from '@/components/GlobalAccessModal';
 import Script from 'next/script';
 import Analytics from '@/components/Analytics';
 
@@ -23,6 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={harmoniaSans.variable}>
       <head>
+        <link rel="icon" type="image/png" href="/assets/bookmark.png" />
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-ZN7E2WZ42B"
           strategy="afterInteractive"
@@ -38,6 +40,7 @@ export default function RootLayout({
       </head>
       <body className="font-harmonia">
         <Analytics />
+        <GlobalAccessModal />
         <main className="pb-20">
           {children}
         </main>

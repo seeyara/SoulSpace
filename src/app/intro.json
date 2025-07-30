@@ -20,7 +20,7 @@
     "prompts": [
       {
         "id": "gratitude_1",
-        "text": "What are 3 things that you're grateful for today?",
+        "text": "What are 5 things that you're grateful for today?",
         "type": "text"
       },
       {

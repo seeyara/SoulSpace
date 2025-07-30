@@ -11,7 +11,7 @@ export async function GET(request: Request) {
 
   try {
     const { data: repliesData, error } = await supabase
-      .from(prefixedTable('community_replies'))
+      .from('community_replies')
       .select(`
         id,
         content,
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     let likedReplyIds = new Set();
     if (userId) {
       const { data: userLikes } = await supabase
-        .from(prefixedTable('community_likes'))
+        .from('community_likes')
         .select('reply_id')
         .eq('user_id', userId);
 
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
 
     // Use default name if user hasn't set one
     const { data: userData } = await supabase
-      .from('users')
+      .from(prefixedTable('users'))
       .select('name')
       .eq('id', userId)
       .single();
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     const userName = userData?.name || 'Username';
 
     const { data: reply, error } = await supabase
-      .from(prefixedTable('community_replies'))
+      .from('community_replies')
       .insert({
         question_id: questionId,
         content,

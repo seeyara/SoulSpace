@@ -1,5 +1,6 @@
-export type CuddleId = 'ellie-sr' | 'olly-sr' | 'ellie-jr' | 'olly-jr';
+import type { CuddleId, Companion } from './api';
 
+// Legacy types for compatibility
 export interface Cuddle {
   name: string;
 }

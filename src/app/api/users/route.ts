@@ -21,7 +21,6 @@ export async function POST(request: Request) {
     // Prepare update data
     const updateData: Record<string, unknown> = {
       id: cleanUserId,
-      updated_at: new Date().toISOString()
     };
 
     if (name !== undefined) {

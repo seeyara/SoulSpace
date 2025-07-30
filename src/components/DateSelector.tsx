@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { supabase } from '@/lib/supabase';
+import { prefixedTable, supabase } from '@/lib/supabase';
 import { format, addDays, subDays } from 'date-fns';
 
 interface DateSelectorProps {
@@ -33,7 +33,7 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
       });
 
       const { data: chatEntries, error } = await supabase
-        .from('chats')
+        .from(prefixedTable('chats'))
         .select('date')
         .in('date', dates);
 

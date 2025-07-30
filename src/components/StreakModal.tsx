@@ -77,7 +77,7 @@ export default function StreakModal({ isOpen, onClose, userId }: StreakModalProp
     try {
       // Update the user with email
       const { error: updateError } = await supabase
-        .from('users')
+        .from(prefixedTable('users'))
         .update({ email })
         .eq('id', userId);
 

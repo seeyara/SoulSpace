@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import BaseModal from './BaseModal';
-import type { CuddleId } from '@/types/cuddles';
+import type { CuddleId } from '@/types/api';
 
 interface CuddleSelectionModalProps {
   isOpen: boolean;

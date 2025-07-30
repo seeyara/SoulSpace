@@ -1,4 +1,4 @@
-import type { CuddleId } from '@/types/cuddles';
+import type { CuddleId } from '@/types/api';
 
 // Storage keys
 export const STORAGE_KEYS = {
@@ -19,13 +19,17 @@ export interface UserProfile {
   [key: string]: string | number | string[] | undefined;
 }
 
+import type { ChatMessage } from '@/hooks/useChat';
 export interface OngoingConversation {
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  messages: ChatMessage[];
   cuddle: CuddleId;
 }
 
 // Storage utility class
 class StorageManager {
+  clearOngoingConversation() {
+    this.removeOngoingConversation
+  }
   private isClient = typeof window !== 'undefined';
 
   // Generic getter with type safety

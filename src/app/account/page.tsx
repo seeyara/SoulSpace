@@ -3,13 +3,13 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import { supabase } from '@/lib/supabase';
+import { supabase, prefixedTable } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { calculateStreak, getDaysInMonth, getCuddleImage, getCuddleName } from '@/lib/utils/accountUtils';
 import { useRouter } from 'next/navigation';
 import ChatHistoryModal from '@/components/ChatHistoryModal';
 import CuddleSelectionModal from '@/components/CuddleSelectionModal';
-import type { CuddleId } from '@/types/cuddles';
+import type { CuddleId } from '@/types/api';
 import { event as gaEvent } from '@/lib/utils/gtag';
 import { storage } from '@/lib/storage';
 
@@ -32,7 +32,7 @@ export default function Account() {
   const fetchEntries = useCallback(async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from('chats')
+        .from(prefixedTable('chats'))
         .select('date, cuddle_id')
         .eq('user_id', userId)
         .order('date', { ascending: true });
@@ -95,7 +95,7 @@ export default function Account() {
         
         // Try Supabase first
         const { data, error } = await supabase
-          .from('users')
+          .from(prefixedTable('users'))
           .select('cuddle_id, cuddle_name')
           .eq('id', storedUserId)
           .single();
@@ -167,7 +167,7 @@ export default function Account() {
   const fetchUserData = async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from('users')
+        .from(prefixedTable('users'))
         .select('name')
         .eq('id', userId)
         .single();
@@ -379,7 +379,7 @@ export default function Account() {
                 return (
                   <>
                     <div className="flex justify-between items-center mb-2">
-                      <h3 className="text-sm text-gray-500">Your Cuddle 💜</h3>
+                      <h3 className="text-sm text-gray-500">Your Cuddle</h3>
                       <button
                         onClick={() => setIsCuddleModalOpen(true)}
                         className="text-xs text-gray-500 hover:text-primary transition-colors underline"

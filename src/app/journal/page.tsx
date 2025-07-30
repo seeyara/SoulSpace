@@ -4,9 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { supabase } from '@/lib/supabase';
+import { prefixedTable, supabase } from '@/lib/supabase';
 import { cuddleData, cuddleIntro } from '@/data/cuddles';
-import type { CuddleId } from '@/types/cuddles';
+import type { CuddleId } from '@/types/api';
 import StreakModal from '@/components/StreakModal';
 import PrivacyModal from '@/components/PrivacyModal';
 import { useRouter } from 'next/navigation';
@@ -14,7 +14,18 @@ import { format } from 'date-fns';
 import axios from 'axios';
 import { event as gaEvent } from '@/lib/utils/gtag';
 import { storage } from '@/lib/storage';
+
+// Import mode toggle components
+import { JournalModeRadioToggle } from '@/components/JournalModeToggle';
+import { JournalSuccessModal } from '@/components/JournalSuccessModal';
+import BaseModal from '@/components/BaseModal';
+
+// Journal mode type
+export type JournalMode = 'flat' | 'guided';
+
 const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue or finish our conversation?";
+const INITIAL_GRATITUDE_PROMPT = "What are 5 things you are grateful for today?";
+const INTRO_MESSAGE = "Hello, I'm {{cuddle_name}}, your companion for this journey. Let's take this time to reset and rejuvenate";
 
 function JournalContent() {
   const searchParams = useSearchParams();
@@ -42,6 +53,91 @@ function JournalContent() {
   const [lastUnfinishedEntry, setLastUnfinishedEntry] = useState<null | { mode: 'guided' | 'free-form', content: string }>(null);
   const isSavingRef = useRef(false);
 
+  // New dual-mode state
+  const [journalMode, setJournalMode] = useState<JournalMode>('flat');
+  const [showGuidedDisclaimer, setShowGuidedDisclaimer] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [flatJournalContent, setFlatJournalContent] = useState('');
+  const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
+  const [showIntroMessage, setShowIntroMessage] = useState(false);
+  const [showGratitudePrompt, setShowGratitudePrompt] = useState(false);
+
+  // Handle mode change
+  const handleModeChange = (mode: JournalMode) => {
+    if (mode === 'guided' && journalMode === 'flat') {
+      setShowGuidedDisclaimer(true);
+    } else {
+      setJournalMode(mode);
+      localStorage.setItem('journal-mode', mode);
+      
+      if (mode === 'flat') {
+        initializeFlatMode();
+      }
+    }
+  };
+
+  // Initialize flat mode
+  const initializeFlatMode = () => {
+    // Check if already submitted today
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const submissionKey = `journal-submitted-${today}`;
+    const hasSubmitted = localStorage.getItem(submissionKey) === 'true';
+    setHasSubmittedToday(hasSubmitted);
+    
+    if (!hasSubmitted) {
+      setMessages([]);
+      setShowInput(false);
+      setIsTyping(false);
+      setJournalingMode(null);
+      // Show both intro and prompt together after a short delay
+      setTimeout(() => {
+        setShowIntroMessage(true);
+        setShowGratitudePrompt(true);
+      }, 800);
+    }
+  };
+
+  // Handle flat journal submission
+  const handleFlatJournalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!flatJournalContent.trim() || !userId) return;
+
+    try {
+      gaEvent({
+        action: 'flat_journal_submit',
+        category: 'journal',
+      });
+
+      // Direct DB call to save journal entry
+      const { error } = await supabase
+        .from(prefixedTable('chats'))
+        .insert({
+          user_id: userId,
+          cuddle_id: selectedCuddle,
+          messages: [{ role: 'user', content: flatJournalContent.trim() }],
+          date: format(new Date(), 'yyyy-MM-dd'),
+          mode: 'flat',
+        });
+
+      if (error) {
+        console.error('Error saving flat journal entry:', error);
+        alert('Failed to save your journal entry. Please try again.');
+        return;
+      }
+
+      // Mark as submitted
+      const today = format(new Date(), 'yyyy-MM-dd');
+      localStorage.setItem(`journal-submitted-${today}`, 'true');
+      setHasSubmittedToday(true);
+      setFlatJournalContent('');
+      setShowSuccessModal(true);
+    } catch (error) {
+      console.error('Error saving flat journal entry:', error);
+      alert('Failed to save your journal entry. Please try again.');
+    }
+  };
+
   // Initialize user and start intro message
   useEffect(() => {
     const initializeUser = async () => {
@@ -54,7 +150,7 @@ function JournalContent() {
           
           // Check if user has a custom name
           const { data } = await supabase
-            .from('users')
+            .from(prefixedTable('users'))
             .select('name')
             .eq('id', storedUserId)
             .single();
@@ -68,7 +164,7 @@ function JournalContent() {
 
         try {
           const { data: newUser, error: createError } = await supabase
-            .from('users')
+            .from(prefixedTable('users'))
             .insert({
               temp_session_id: tempSessionId
             })
@@ -223,7 +319,7 @@ function JournalContent() {
         const checkIfNewUser = async () => {
           try {
             const { data } = await supabase
-              .from('users')
+              .from(prefixedTable('users'))
               .select('temp_session_id')
               .eq('id', storedUserId)
               .single();
@@ -238,7 +334,7 @@ function JournalContent() {
                   content: cuddleIntro.replace('{cuddle-name}', cuddle.name)
                 }]);
                 setIsTyping(false);
-              }, 1000);
+              }, 1500);
             }
           } catch (error) {
             console.error('Error checking if new user:', error);
@@ -297,9 +393,11 @@ function JournalContent() {
     }
 
     const userMessage = { role: 'user' as const, content: userResponse.trim() };
-    
-    // Batch state updates to prevent multiple re-renders
-    setMessages(prev => [...prev, userMessage]);
+    // Always append user message to the full previous messages
+    setMessages(prev => {
+      const updated = [...prev, userMessage];
+      return updated;
+    });
     setUserResponse('');
     setShowInput(false);
     setIsTyping(true);
@@ -308,7 +406,7 @@ function JournalContent() {
       // Get user profile from localStorage
       const userProfile = storage.getUserProfile();
 
-      // Skip the first two assistant intro messages when sending to OpenAI
+      // For OpenAI, skip the first two assistant messages if present (but keep for display)
       let messageHistoryToSend = messages;
       if (messages.length > 2 && messages[0].role === 'assistant' && messages[1].role === 'assistant') {
         messageHistoryToSend = messages.slice(2);
@@ -326,7 +424,6 @@ function JournalContent() {
             'x-user-profile': userProfile ? JSON.stringify(userProfile) : ''
           },
          })
-      
       } catch (error) {
         console.error('Error:', error);
       }
@@ -350,43 +447,33 @@ function JournalContent() {
         content: firstMessage
       };
 
-      // If there is a second message, add it as a separate assistant message
-      if (secondMessage) {
-        const secondAssistantMessage = {
-          role: 'assistant' as const,
-          content: secondMessage
-        };
-        const finalMessages = [...messages, userMessage, firstAssistantMessage, secondAssistantMessage];
-        setIsTyping(false);
-        setMessages(finalMessages);
-        storage.setOngoingConversation({
-          messages: finalMessages,
-          cuddle: selectedCuddle
-        });
-        if (shouldEnd) {
-          setTimeout(() => {
-            setShowStreakModal(true);
-          }, 1500);
-          return;
+      setMessages(prev => {
+        let updated = [...prev, firstAssistantMessage];
+        if (secondMessage) {
+          updated = [
+            ...updated,
+            { role: 'assistant' as const, content: secondMessage }
+          ];
         }
-        setShowInput(true);
-      } else {
-        // Only one message from AI
-        const updatedMessagesWithFirst = [...messages, userMessage, firstAssistantMessage];
-        setIsTyping(false);
-        setMessages(updatedMessagesWithFirst);
-        storage.setOngoingConversation({
-          messages: updatedMessagesWithFirst,
-          cuddle: selectedCuddle
-        });
-        if (shouldEnd) {
-          setTimeout(() => {
-            setShowStreakModal(true);
-          }, 1500);
-          return;
-        }
-        setShowInput(true);
+        return updated;
+      });
+      setIsTyping(false);
+      storage.setOngoingConversation({
+        messages: [
+          ...messages,
+          userMessage,
+          firstAssistantMessage,
+          ...(secondMessage ? [{ role: 'assistant' as const, content: secondMessage }] : [])
+        ],
+        cuddle: selectedCuddle
+      });
+      if (shouldEnd) {
+        setTimeout(() => {
+          setShowStreakModal(true);
+        }, 1500);
+        return;
       }
+      setShowInput(true);
     } catch (error) {
       console.error('Error in handleSubmit:', error);
       // Batch error state updates
@@ -710,9 +797,28 @@ function JournalContent() {
   }, [journalingMode, freeFormContent, messages, selectedCuddle, selectedDate]);
 
   // Helper to check if user profile is complete
-  const isProfileComplete = (profile: any) => {
-    return profile && profile.cuddleOwnership && profile.gender && profile.lifeStage;
+  interface UserProfile {
+    cuddleOwnership?: string;
+    gender?: string;
+    lifeStage?: string;
+  }
+  
+  const isProfileComplete = (profile: UserProfile | null | undefined): boolean => {
+    return Boolean(profile?.cuddleOwnership && profile?.gender && profile?.lifeStage);
   };
+
+  // Load saved mode preference and initialize mode
+  useEffect(() => {
+    const savedMode = localStorage.getItem('journal-mode') as JournalMode;
+    if (savedMode && ['flat', 'guided'].includes(savedMode)) {
+      setJournalMode(savedMode);
+    }
+    
+    // Initialize flat mode if selected
+    if (userId && (savedMode === 'flat' || journalMode === 'flat') && !isWelcomeBack) {
+      initializeFlatMode();
+    }
+  }, [userId, isWelcomeBack]);
 
   // Show PrivacyModal until profile is complete
   useEffect(() => {
@@ -759,24 +865,147 @@ function JournalContent() {
             className="h-8 w-auto cursor-pointer"
             onClick={() => router.push('/')}
           />
-          <div className="flex items-center gap-2">
-            <Image
-              src={getCuddleImage(selectedCuddle)}
-              alt={getDisplayCuddleName(selectedCuddle)}
-              width={32}
-              height={32}
-              className="h-8 w-8 rounded-full"
+          <div className="flex items-center gap-4">
+            <JournalModeRadioToggle
+              mode={journalMode}
+              onModeChange={handleModeChange}
+              disabled={isTyping}
             />
-            <span className="text-primary font-medium">
-              {getDisplayCuddleName(selectedCuddle)}
-            </span>
           </div>
         </div>
       </header>
 
-      {/* Chat Area */}
+      {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto" ref={messagesContainerRef}>
-        <div className="max-w-3xl mx-auto space-y-4 px-4 pt-20 pb-24">
+        {journalMode === 'flat' ? (
+          // Flat Journal Mode
+          <div className="max-w-4xl mx-auto px-4 pt-20 pb-24">
+            <AnimatePresence mode="wait">
+              {showIntroMessage && (
+                <motion.div
+                  key="intro"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="flex items-start space-x-4 mb-8"
+                >
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full overflow-hidden">
+                      <Image
+                        src={getCuddleImage(selectedCuddle)}
+                        alt={getDisplayCuddleName(selectedCuddle)}
+                        width={48}
+                        height={48}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="bg-primary/10 rounded-2xl rounded-tl-md px-6 py-4">
+                      <p className="text-primary leading-relaxed">
+                        {INTRO_MESSAGE.replace("{{cuddle_name}}", getDisplayCuddleName(selectedCuddle))}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {showGratitudePrompt && (
+                <motion.div
+                  key="prompt"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start space-x-4 mb-8"
+                >
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full overflow-hidden">
+                      <Image
+                        src={getCuddleImage(selectedCuddle)}
+                        alt={getDisplayCuddleName(selectedCuddle)}
+                        width={48}
+                        height={48}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="bg-primary/10 rounded-2xl rounded-tl-md px-6 py-4">
+                      <p className="text-primary leading-relaxed font-medium">
+                        {INITIAL_GRATITUDE_PROMPT}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Flat Journal Input */}
+            <AnimatePresence>
+              {showGratitudePrompt && !hasSubmittedToday && (
+                <motion.div
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="mt-8"
+                >
+                  <form onSubmit={handleFlatJournalSubmit} className="space-y-4">
+                    <div className="relative max-w-2xl mx-auto w-full sm:px-0 px-2">
+                      <textarea
+                        value={flatJournalContent}
+                        onChange={(e) => setFlatJournalContent(e.target.value)}
+                        placeholder="Take your time and share what's on your mind..."
+                        maxLength={10000}
+                        className="w-full px-6 py-4 border-2 border-primary/20 rounded-2xl resize-none focus:outline-none focus:border-primary placeholder:text-gray-400 text-primary leading-relaxed min-h-[200px] text-base bg-white"
+                        style={{ minHeight: '200px', fontFamily: 'inherit' }}
+                      />
+                      <div className="absolute bottom-4 right-4 text-xs text-gray-400">
+                        {flatJournalContent.length}/10000
+                      </div>
+                    </div>
+
+                    <div className="flex justify-center">
+                      <button
+                        type="submit"
+                        disabled={!flatJournalContent.trim()}
+                        className={`px-8 py-3 rounded-2xl font-medium transition-all duration-200 ${
+                          flatJournalContent.trim()
+                            ? 'bg-primary text-white hover:bg-primary/90 focus:ring-2 focus:ring-primary focus:ring-opacity-50 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        } focus:outline-none`}
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              )}
+
+              {hasSubmittedToday && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-8"
+                >
+                  <div className="bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
+                    <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-green-900 mb-2">
+                      You've already journaled today! ✨
+                    </h3>
+                    <p className="text-green-700">
+                      Come back tomorrow for your next reflection session with {getDisplayCuddleName(selectedCuddle)}.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        ) : (
+          // Guided Journal Mode (existing chat interface)
+          <div className="max-w-3xl mx-auto space-y-4 px-4 pt-20 pb-24">
           {isLoadingMore && (
             <div className="flex justify-center py-4">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
@@ -905,86 +1134,87 @@ function JournalContent() {
           </AnimatePresence>
 
           {/* Add ref for auto-scrolling */}
-          <div ref={messagesEndRef} />
-
-          {/* User Response Input */}
-          {showInput && (
-            <div className="flex justify-end">
-              <div className="w-[80%]">
-                {isWelcomeBack ? (
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+        
+        {/* User Response Input - only show for guided mode */}
+        {journalMode === 'guided' && showInput && (
+          <div className="flex justify-end">
+            <div className="max-w-2xl mx-auto w-full sm:px-0 px-2">
+              {isWelcomeBack ? (
+                <div className="flex justify-end items-center gap-2">
+                  <button
+                    onClick={handleFinishEntry}
+                    className="text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
+                  >
+                    End chat
+                  </button>
+                  <button
+                    onClick={handleContinue}
+                    className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors"
+                  >
+                    Continue
+                  </button>
+                </div>
+              ) : journalingMode === 'free-form' ? (
+                <form onSubmit={handleFreeFormSubmit} className="space-y-4">
+                  <textarea
+                    value={freeFormContent}
+                    onChange={(e) => setFreeFormContent(e.target.value)}
+                    placeholder="Write down your thoughts or feelings or experiences that you'd like to reflect on..."
+                    rows={8}
+                    className="w-full px-6 py-4 rounded-2xl border-2 border-primary/20 focus:border-primary outline-none bg-white resize-none text-base"
+                  />
+                  <div className="flex justify-between items-center">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleFinishEntry}
+                        className="text-primary/70 border-2 border-primary/20 px-4 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
+                      >
+                        End entry
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!freeFormContent.trim()}
+                        className="bg-primary text-white px-6 py-2 rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
+                      >
+                        Save Entry
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-2">
+                  <textarea
+                    value={userResponse}
+                    onChange={(e) => setUserResponse(e.target.value)}
+                    placeholder="Type your response..."
+                    rows={3}
+                    className="w-full px-6 py-4 rounded-2xl border-2 border-primary/20 focus:border-primary outline-none bg-white resize-none"
+                  />
                   <div className="flex justify-end items-center gap-2">
                     <button
+                      type="button"
                       onClick={handleFinishEntry}
-                      className="text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
+                      className="text-primary/70 border-2 border-primary/20 px-2 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
                     >
                       End chat
                     </button>
                     <button
-                      onClick={handleContinue}
-                      className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors"
+                      type="submit"
+                      disabled={!userResponse.trim()}
+                      className="bg-primary text-white px-6 py-2 rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
                     >
-                      Continue
+                      Send
                     </button>
                   </div>
-                ) : journalingMode === 'free-form' ? (
-                  <form onSubmit={handleFreeFormSubmit} className="space-y-4">
-                    <textarea
-                      value={freeFormContent}
-                      onChange={(e) => setFreeFormContent(e.target.value)}
-                      placeholder="Write down your thoughts or feelings or experiences that you'd like to reflect on..."
-                      rows={8}
-                      className="w-full p-6 rounded-2xl border-2 border-primary/20 focus:border-primary outline-none bg-white resize-none text-base"
-                    />
-                    <div className="flex justify-between items-center">
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={handleFinishEntry}
-                          className="text-primary/70 border-2 border-primary/20 px-4 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
-                        >
-                          End entry
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={!freeFormContent.trim()}
-                          className="bg-primary text-white px-6 py-2 rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
-                        >
-                          Save Entry
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                ) : (
-                  <form onSubmit={handleSubmit} className="space-y-2">
-                    <textarea
-                      value={userResponse}
-                      onChange={(e) => setUserResponse(e.target.value)}
-                      placeholder="Type your response..."
-                      rows={3}
-                      className="w-full p-4 rounded-2xl border-2 border-primary/20 focus:border-primary outline-none bg-white resize-none"
-                    />
-                    <div className="flex justify-end items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleFinishEntry}
-                        className="text-primary/70 border-2 border-primary/20 px-2 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
-                      >
-                        End chat
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={!userResponse.trim()}
-                        className="bg-primary text-white px-6 py-2 rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
-                      >
-                        Send
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </div>
+                </form>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <StreakModal
@@ -997,6 +1227,66 @@ function JournalContent() {
       <PrivacyModal
         isOpen={showPrivacyModal}
         onClose={handlePrivacyModalClose}
+      />
+
+      {/* Guided Mode Disclaimer Modal */}
+      <BaseModal
+        isOpen={showGuidedDisclaimer}
+        onClose={() => setShowGuidedDisclaimer(false)}
+        maxWidth="max-w-md"
+      >
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full overflow-hidden">
+            <Image
+              src={getCuddleImage(selectedCuddle)}
+              alt={getDisplayCuddleName(selectedCuddle)}
+              width={64}
+              height={64}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          
+          <h3 className="text-xl font-semibold text-gray-900 mb-4">
+            Switch to Guided Journaling?
+          </h3>
+            
+            <div className="bg-secondary border border-primary/10 rounded-lg p-4 mb-4">
+              <p className="text-sm">
+                Guided Journalling is experimental and uses GPT to guide reflection.
+                <br />For medical advice, please seek professional help.
+              </p>
+            </div>
+          
+          <div className="flex flex-col space-y-3">
+            <button
+              onClick={() => {
+                setJournalMode('guided');
+                localStorage.setItem('journal-mode', 'guided');
+                setShowGuidedDisclaimer(false);
+                setJournalingMode('guided');
+                setShowInput(true);
+              }}
+              className="w-full px-4 py-3 text-sm font-medium text-white bg-primary border border-transparent rounded-lg hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 transition-colors duration-200"
+            >
+              Okay, got it
+            </button>
+            <button
+              onClick={() => setShowGuidedDisclaimer(false)}
+              className="w-full px-4 py-3 text-sm font-medium text-primary bg-secondary border border-primary/10 rounded-lg hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 transition-colors duration-200"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </BaseModal>
+
+      {/* Success Modal */}
+      <JournalSuccessModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        onGoToAccount={() => router.push('/account')}
+        cuddleName={getDisplayCuddleName(selectedCuddle)}
+        entryDate={selectedDate}
       />
     </main>
   );

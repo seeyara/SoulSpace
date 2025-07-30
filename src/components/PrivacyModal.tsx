@@ -1,5 +1,8 @@
 'use client';
 
+// Feature flag for PrivacyModal
+const PRIVACY_MODAL_ENABLED = process.env.NEXT_PUBLIC_PRIVACY_MODAL_ENABLED === 'true';
+
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import BaseModal from './BaseModal';
@@ -16,6 +19,8 @@ interface UserProfile {
 }
 
 export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
+  if (!PRIVACY_MODAL_ENABLED) return null;
+
   const [step, setStep] = useState<'privacy' | 'cuddle' | 'gender' | 'lifeStage' | 'done'>('privacy');
   const [profile, setProfile] = useState<UserProfile>({
     cuddleOwnership: '',
@@ -175,7 +180,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
             <div className="flex flex-col gap-3 mt-4">
               <button onClick={() => { handleProfileChange('lifeStage', 'school'); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'school' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>In school</button>
               <button onClick={() => { handleProfileChange('lifeStage', 'college'); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'college' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>College</button>
-              <button onClick={() => { handleProfileChange('lifeStage', ''); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'career' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>Working/Career</button>
+              <button onClick={() => { handleProfileChange('lifeStage', 'career'); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'career' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>Working/Career</button>
               <button onClick={() => { handleProfileChange('lifeStage', 'other'); setStep('done'); }} className={`w-full px-6 py-3 rounded-2xl font-medium border-2 ${profile.lifeStage === 'other' ? 'bg-primary text-white border-primary' : 'border-primary/20 text-primary'} hover:bg-primary/10 transition-colors`}>Other</button>
             </div>
             <p className="text-xs text-primary/60 mt-2">(We ask so we can make Whispr feel more like <span className='italic'>you</span>.)</p>
