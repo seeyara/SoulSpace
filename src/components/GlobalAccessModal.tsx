@@ -22,17 +22,12 @@ export default function GlobalAccessModal() {
     // Check access status using the access control system
     const accessStatus = accessControl.checkAccess();
     
-    if (!accessStatus.hasAccess || accessStatus.needsEmailVerification || !accessStatus.hasValidToken) {
+    if (!accessStatus.hasAccess) {
       setIsOpen(true);
       
       // Pre-fill email if available
       if (accessStatus.email) {
         setEmail(accessStatus.email);
-      }
-      
-      // If we have email but no valid token, skip to code verification
-      if (accessStatus.email && !accessStatus.hasValidToken) {
-        setStep('code');
       }
     } else {
       setIsOpen(false);
@@ -61,8 +56,7 @@ export default function GlobalAccessModal() {
         
         // If user already exists, skip code step and go directly to success
         if (isExistingUser) {
-          localStorage.setItem('soulspace_access_granted', 'true');
-          localStorage.setItem('soulspace_access_timestamp', new Date().toISOString());
+          accessControl.grantAccess(email);
           setStep('success');
         } else {
           setStep('code');
@@ -82,24 +76,14 @@ export default function GlobalAccessModal() {
     
     if (code.trim().toUpperCase() === 'JOURNAL21') {
       try {
-        // Generate access token (in a real app, this would come from server)
-        const accessToken = `token_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        // Grant access with email
+        accessControl.grantAccess(email);
         
-        // Verify the token
-        const isTokenValid = await accessControl.verifyAccessToken(accessToken);
+        // Upsert user in database
+        await upsertUser({ email });
         
-        if (isTokenValid) {
-          // Grant access with email and token
-          accessControl.grantAccess(email, accessToken);
-          
-          // Upsert user in database
-          await upsertUser({ email });
-          
-          setStep('success');
-          setManuallyClosed(false);
-        } else {
-          setError('Failed to verify access token. Please try again.');
-        }
+        setStep('success');
+        setManuallyClosed(false);
       } catch (error) {
         console.error('Error in code submission:', error);
         setError('An error occurred. Please try again.');
@@ -126,13 +110,15 @@ export default function GlobalAccessModal() {
   return (
     <BaseModal isOpen={isOpen} onClose={() => { setIsOpen(false); setManuallyClosed(true); }} maxWidth="max-w-md">
       <div className="text-center space-y-6">
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto"
-        >
-          <LockClosedIcon className="w-10 h-10 text-primary" />
-        </motion.div>
+        {step !== 'success' && (
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto"
+          >
+            <LockClosedIcon className="w-10 h-10 text-primary" />
+          </motion.div>
+        )}
         {step === 'email' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <h3 className="text-2xl font-semibold text-gray-900 mb-2">Get Exclusive Access</h3>
@@ -210,7 +196,14 @@ export default function GlobalAccessModal() {
               <h3 className="text-2xl font-bold text-primary/700 mb-2">Welcome to Whispr by Soul</h3>
               <p className="text-primary/700 mb-2">You now have access to a calm space that is just yours 🫶🏼</p>
               
-              <p className="text-primary/800 font-semibold">Let's get started 🚀</p>
+              <p className="text-primary/800 font-semibold mb-6">Let's get started 🚀</p>
+              
+              <button
+                onClick={() => { setIsOpen(false); setManuallyClosed(true); }}
+                className="bg-primary text-white px-6 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors w-full"
+              >
+                Start Journaling
+              </button>
             </div>
           </motion.div>
         )}

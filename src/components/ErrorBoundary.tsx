@@ -39,6 +39,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       console.error('Error info:', errorInfo);
     }
 
+
     // Call custom error handler if provided
     this.props.onError?.(error, errorInfo);
   }
@@ -107,5 +108,6 @@ export function useErrorHandler() {
     if (errorInfo) {
       console.error('Error info:', errorInfo);
     }
+
   };
 }

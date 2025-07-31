@@ -3,6 +3,8 @@ import type { CuddleId } from '@/types/api';
 // Storage keys
 export const STORAGE_KEYS = {
   USER_ID: 'soul_journal_user_id',
+  SESSION_ID: 'soul_journal_session_id',
+  EMAIL: 'soul_journal_email',
   CUDDLE_ID: 'soul_journal_cuddle_id',
   CUDDLE_NAME: 'soul_journal_cuddle_name',
   USER_PROFILE: 'user_profile',
@@ -28,7 +30,7 @@ export interface OngoingConversation {
 // Storage utility class
 class StorageManager {
   clearOngoingConversation() {
-    this.removeOngoingConversation
+    this.removeOngoingConversation();
   }
   private isClient = typeof window !== 'undefined';
 
@@ -89,6 +91,32 @@ class StorageManager {
 
   removeUserId(): boolean {
     return this.remove(STORAGE_KEYS.USER_ID);
+  }
+
+  // Session ID methods
+  getSessionId(): string | null {
+    return this.get<string>(STORAGE_KEYS.SESSION_ID);
+  }
+
+  setSessionId(sessionId: string): boolean {
+    return this.set(STORAGE_KEYS.SESSION_ID, sessionId);
+  }
+
+  removeSessionId(): boolean {
+    return this.remove(STORAGE_KEYS.SESSION_ID);
+  }
+
+  // Email methods
+  getEmail(): string | null {
+    return this.get<string>(STORAGE_KEYS.EMAIL);
+  }
+
+  setEmail(email: string): boolean {
+    return this.set(STORAGE_KEYS.EMAIL, email);
+  }
+
+  removeEmail(): boolean {
+    return this.remove(STORAGE_KEYS.EMAIL);
   }
 
   // Cuddle methods
@@ -221,6 +249,10 @@ export const storage = new StorageManager();
 // Export convenience functions for backward compatibility
 export const getUserId = () => storage.getUserId();
 export const setUserId = (userId: string) => storage.setUserId(userId);
+export const getSessionId = () => storage.getSessionId();
+export const setSessionId = (sessionId: string) => storage.setSessionId(sessionId);
+export const getEmail = () => storage.getEmail();
+export const setEmail = (email: string) => storage.setEmail(email);
 export const getCuddleId = () => storage.getCuddleId();
 export const setCuddleId = (cuddleId: CuddleId) => storage.setCuddleId(cuddleId);
 export const getCuddleName = () => storage.getCuddleName();

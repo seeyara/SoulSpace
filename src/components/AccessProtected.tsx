@@ -109,7 +109,6 @@ export function useAccessControl() {
       return newStatus;
     },
     grantAccess: accessControl.grantAccess,
-    revokeAccess: accessControl.revokeAccess,
     clearAll: accessControl.clearAll
   };
 }

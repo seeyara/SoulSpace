@@ -51,13 +51,13 @@ export const JournalSuccessModal = memo(function JournalSuccessModal({
             duration: 0.6, 
             bounce: 0.4 
           }}
-          className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-6"
+          className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-primary-100 mb-6"
         >
           <motion.svg
             initial={{ pathLength: 0 }}
             animate={{ pathLength: 1 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="h-8 w-8 text-green-600"
+            className="h-8 w-8 text-primary-600"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -78,7 +78,7 @@ export const JournalSuccessModal = memo(function JournalSuccessModal({
           transition={{ delay: 0.3 }}
           className="text-xl font-semibold text-gray-900 mb-3"
         >
-          Journal Entry Saved! 🎉
+          
         </motion.h3>
 
         {/* Message */}
@@ -88,9 +88,6 @@ export const JournalSuccessModal = memo(function JournalSuccessModal({
           transition={{ delay: 0.4 }}
           className="text-gray-600 mb-6 space-y-3"
         >
-          <p>
-            Your thoughts have been safely saved for {formatDate(entryDate)}.
-          </p>
           
           <div className="bg-purple-50 border border-purple-100 rounded-lg p-4">
             <p className="text-sm text-primary">
