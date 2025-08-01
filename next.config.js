@@ -1,3 +1,5 @@
+const { withSentryConfig } = require('@sentry/nextjs');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
@@ -42,4 +44,12 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig 
+// Sentry configuration
+const sentryWebpackPluginOptions = {
+  // Suppresses source map uploading logs during build
+  silent: true,
+  org: "soulspace-org",
+  project: "soulspace-app",
+};
+
+module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions); 
