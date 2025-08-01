@@ -10,12 +10,13 @@ import type { CuddleId } from '@/types/api';
 import StreakModal from '@/components/StreakModal';
 import PrivacyModal from '@/components/PrivacyModal';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, set } from 'date-fns';
 import axios from 'axios';
 import { event as gaEvent } from '@/lib/utils/gtag';
 import { storage } from '@/lib/storage';
 import { cuddlePrompts } from '@/data/cuddles';
-import { saveChatMessage } from '@/lib/utils/chatUtils';
+import { saveChatMessage, generateJournalResponse } from '@/lib/utils/chatUtils';
+// import * as Sentry from '@sentry/nextjs';
 
 // Import mode toggle components
 import { JournalModeRadioToggle } from '@/components/JournalModeToggle';
@@ -93,6 +94,8 @@ function JournalContent() {
   const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
   const [showIntroMessage, setShowIntroMessage] = useState(false);
   const [showGratitudePrompt, setShowGratitudePrompt] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
 
   // Handle mode change
   const handleModeChange = (mode: JournalMode) => {
@@ -135,8 +138,10 @@ function JournalContent() {
 
     if (!flatJournalContent.trim() || !userId) return;
 
+    // Set user context for Sentry
+    // Sentry.setUser({ id: userId });
+
     const userMessage = { role: 'user' as const, content: flatJournalContent.trim() };
-    const cuddleReply = { role: 'assistant' as const, content: "Thank you for sharing that with me" };
 
     // Include intro messages in the conversation
     const introMessage = { role: 'assistant' as const, content: INTRO_MESSAGE.replace("{{cuddle_name}}", getDisplayCuddleName(selectedCuddle)) };
@@ -148,19 +153,36 @@ function JournalContent() {
         category: 'journal',
       });
 
-      // Immediately update UI with user message
-      const newMessages = [...messages, introMessage, promptMessage, userMessage];
+      // Immediately update UI with user message and typing indicator
+      const typingMessage = { role: 'assistant' as const, content: '...' };
+      const newMessages = [...messages, introMessage, promptMessage, userMessage, typingMessage];
       setMessages(newMessages);
       setFlatJournalContent('');
       setShowGratitudePrompt(false);
       setShowIntroMessage(false);
+      setIsTyping(true);
 
-      // Add cuddle reply after delay
+      // Generate AI response
       setTimeout(async () => {
-        const finalMessages = [...newMessages, cuddleReply];
-        setMessages(finalMessages);
+        let finalMessages;
 
-        // Save complete conversation to database using proper method
+        try {
+          const aiResponse = await generateJournalResponse(
+            getTodaysPrompt(),
+            userMessage.content,
+            getDisplayCuddleName(selectedCuddle)
+          );
+
+          const cuddleReply = { role: 'assistant' as const, content: aiResponse };
+          // Replace typing message with actual AI response
+          finalMessages = [...newMessages.slice(0, -1), cuddleReply];;
+        } catch (aiError) {
+          console.error('Error generating AI response:', aiError);
+          const fallbackReply = { role: 'assistant' as const, content: "Thank you for sharing this, it means so much to me 🫶🏼. Im always here for you" };
+          finalMessages = [...newMessages.slice(0, -1), fallbackReply];
+        } setMessages(finalMessages);
+        setIsGeneratingResponse(false);
+
         try {
           const { error } = await saveChatMessage({
             messages: finalMessages,
@@ -169,8 +191,24 @@ function JournalContent() {
           });
 
           if (error) {
+            // Sentry.captureException(error, { 
+            //   extra: { 
+            //     context: 'flat_journal_save',
+            //     userId,
+            //     cuddleId: selectedCuddle,
+            //     messageCount: finalMessages.length,
+            //     messageLength: finalMessages.reduce((acc, msg) => acc + msg.content.length, 0),
+            //     timestamp: new Date().toISOString(),
+            //     userAgent: navigator.userAgent,
+            //     error: error
+            //   },
+            //   tags: {
+            //     feature: 'flat_journal',
+            //     action: 'save_chat_message'
+            //   }
+            // });
             console.error('Error saving flat journal entry:', error);
-            alert('Failed to save your journal entry. Please try again.');
+            setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
             return;
           }
 
@@ -178,28 +216,51 @@ function JournalContent() {
           const today = format(new Date(), 'yyyy-MM-dd');
           localStorage.setItem(`journal-submitted-${today}`, 'true');
           setHasSubmittedToday(true);
-          
-          // Show appropriate modal after 9 seconds based on user email status
+
+          // Show appropriate modal after 5 seconds based on user email status
           setTimeout(() => {
             const userEmail = storage.getEmail();
-            if (userEmail) {
-              // User has email - show success modal
-              setShowSuccessModal(true);
-            } else {
-              // User has no email - show streak modal for onboarding
-              setShowStreakModal(true);
-            }
+
+            userEmail ? setShowSuccessModal(true) : setShowStreakModal(true);
           }, 5000);
 
         } catch (saveError) {
+          // Sentry.captureException(saveError, { 
+          //   extra: { 
+          //     context: 'flat_journal_save_timeout',
+          //     userId,
+          //     cuddleId: selectedCuddle,
+          //     messageCount: finalMessages.length,
+          //     timestamp: new Date().toISOString(),
+          //     saveError: saveError
+          //   },
+          //   tags: {
+          //     feature: 'flat_journal',
+          //     action: 'save_timeout'
+          //   }
+          // });
           console.error('Error saving flat journal entry:', saveError);
-          alert('Failed to save your journal entry. Please try again.');
+          setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
         }
       }, 1000);
 
     } catch (error) {
+      // Sentry.captureException(error, { 
+      //   extra: { 
+      //     context: 'flat_journal_submission',
+      //     userId,
+      //     cuddleId: selectedCuddle,
+      //     contentLength: flatJournalContent.length,
+      //     timestamp: new Date().toISOString(),
+      //     submissionError: error
+      //   },
+      //   tags: {
+      //     feature: 'flat_journal',
+      //     action: 'submission_error'
+      //   }
+      // });
       console.error('Error in flat journal submission:', error);
-      alert('Failed to process your journal entry. Please try again.');
+      setErrorMessage('Having trouble processing your journal entry. Please try again in a moment.');
       // Reset UI state on error
       setMessages(messages); // Revert to previous state
       setFlatJournalContent(userMessage.content); // Restore user input
@@ -793,6 +854,16 @@ function JournalContent() {
     }
   }, [showStreakModal, userId, userName]);
 
+  // Auto-dismiss error message after 5 seconds
+  useEffect(() => {
+    if (errorMessage) {
+      const timer = setTimeout(() => {
+        setErrorMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMessage]);
+
   // Add scroll event listener
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -1113,8 +1184,8 @@ function JournalContent() {
                         type="submit"
                         disabled={!flatJournalContent.trim()}
                         className={`px-8 py-3 rounded-2xl font-medium transition-all duration-200 ${flatJournalContent.trim()
-                            ? 'bg-primary text-white hover:bg-primary/90 focus:ring-2 focus:ring-primary focus:ring-opacity-50 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
-                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          ? 'bg-primary text-white hover:bg-primary/90 focus:ring-2 focus:ring-primary focus:ring-opacity-50 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                           } focus:outline-none`}
                       >
                         Send
@@ -1423,6 +1494,39 @@ function JournalContent() {
           </div>
         </div>
       </BaseModal>
+
+      {/* Error Message */}
+      <AnimatePresence>
+        {errorMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 max-w-md w-full mx-4"
+          >
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-4 shadow-lg">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="w-5 h-5 text-red-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <p className="text-sm text-red-800">{errorMessage}</p>
+                </div>
+                <button
+                  onClick={() => setErrorMessage(null)}
+                  className="ml-4 inline-flex text-red-400 hover:text-red-600 focus:outline-none"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Success Modal */}
       <JournalSuccessModal

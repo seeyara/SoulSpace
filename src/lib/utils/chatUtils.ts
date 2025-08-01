@@ -1,5 +1,6 @@
 import { supabase, prefixedTable } from '@/lib/supabase';
 import { format } from 'date-fns';
+// import * as Sentry from '@sentry/nextjs';
 
 export const MESSAGES_PER_PAGE = 20;
 export const MAX_MESSAGE_HISTORY = 100;
@@ -43,22 +44,71 @@ export interface UnfinishedEntry {
 
 export async function saveChatMessage({ messages, userId, cuddleId }: SaveChatMessageParams) {
   const today = format(new Date(), 'yyyy-MM-dd');
-  
+
   // Trim messages to prevent excessive storage
   const trimmedMessages = messages.slice(-MAX_MESSAGE_HISTORY);
-  
-  return await supabase
+
+  const payload = {
+    date: today,
+    user_id: userId,
+    messages: trimmedMessages,
+    cuddle_id: cuddleId,
+    updated_at: new Date().toISOString()
+  };
+
+  // Add breadcrumb for database operation
+  // Sentry.addBreadcrumb({
+  //   message: 'Database upsert operation starting',
+  //   category: 'database',
+  //   data: {
+  //     table: prefixedTable('chats'),
+  //     userId,
+  //     cuddleId,
+  //     messageCount: trimmedMessages.length,
+  //     date: today,
+  //     payloadSize: JSON.stringify(payload).length
+  //   },
+  //   level: 'info'
+  // });
+
+  const result = await supabase
     .from(prefixedTable('chats'))
-    .upsert({
-      date: today,
-      user_id: userId,
-      messages: trimmedMessages,
-      cuddle_id: cuddleId,
-      updated_at: new Date().toISOString()
-    }, { 
-      onConflict: 'user_id,date',
-      ignoreDuplicates: false 
-    });
+    .upsert(payload);
+
+  // Log the database response
+  if (result.error) {
+    // Sentry.captureException(result.error, {
+    //   extra: {
+    //     context: 'database_upsert_error',
+    //     table: prefixedTable('chats'),
+    //     userId,
+    //     cuddleId,
+    //     date: today,
+    //     messageCount: trimmedMessages.length,
+    //     supabaseError: result.error,
+    //     payload: JSON.stringify(payload).substring(0, 1000) // Truncate for privacy
+    //   },
+    //   tags: {
+    //     database: 'supabase',
+    //     operation: 'upsert',
+    //     table: 'chats'
+    //   }
+    // });
+  } else {
+    // Log successful save
+    // Sentry.addBreadcrumb({
+    //   message: 'Database upsert successful',
+    //   category: 'database',
+    //   data: {
+    //     userId,
+    //     cuddleId,
+    //     messageCount: trimmedMessages.length
+    //   },
+    //   level: 'info'
+    // });
+  }
+
+  return result;
 }
 
 export async function fetchUnfinishedEntry(userId: string): Promise<UnfinishedEntry | null> {
@@ -147,8 +197,8 @@ export async function fetchPaginatedChatHistory(
   }));
 
   const hasMore = entries.length === limit;
-  const nextCursor = hasMore && entries.length > 0 
-    ? entries[entries.length - 1].date 
+  const nextCursor = hasMore && entries.length > 0
+    ? entries[entries.length - 1].date
     : undefined;
 
   return {
@@ -183,11 +233,62 @@ export async function fetchUserChatStats(userId: string): Promise<{
   }, {} as Record<string, number>);
 
   const favoriteCompanion = Object.entries(companionCounts)
-    .sort(([,a], [,b]) => b - a)[0]?.[0];
+    .sort(([, a], [, b]) => b - a)[0]?.[0];
 
   return {
     totalChats: count || 0,
     recentActivity: (data || []).map(chat => chat.date),
     favoriteCompanion
   };
+}
+
+export async function generateJournalResponse(
+  prompt: string,
+  userResponse: string,
+  cuddleName: string
+): Promise<string> {
+  const fallbackMessage = "Thank you for sharing this, it means so much to me 🫶🏼. Im always here for you";
+
+  try {
+    const systemPrompt = `You are a warm, caring companion helping users with daily journaling.
+The user just responded to today’s journaling prompt.
+Write exactly 2 short, conversational sentences:
+
+Gently acknowledge or validate their response (keep it warm but light).
+
+Encourage them to keep reflecting, and casually remind them to return tomorrow to maintain their streak.
+Avoid sounding preachy, overly formal, or dramatic — aim for friendly and human.`;
+
+    const response = await fetch('/api/openai', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        systemPrompt,
+        userMessage: `Today's prompt: "${prompt}"\n\nMy response: "${userResponse}"`,
+        model: 'gpt-4',
+        maxTokens: 150,
+        temperature: 0.7
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const aiMessage = data.response?.trim();
+
+    if (!aiMessage) {
+      throw new Error('No content in API response');
+    }
+
+    console.log('Journal AI response generated successfully');
+    return aiMessage;
+
+  } catch (error) {
+    console.error('Failed to generate journal response:', error);
+    return fallbackMessage;
+  }
 } 

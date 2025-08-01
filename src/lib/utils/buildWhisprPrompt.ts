@@ -38,13 +38,13 @@ export function buildWhisprPrompt(userProfile: {
   ---
   RESPONSE FORMAT: Always reply with TWO distinct messages, like two chat bubbles.
   
-  **MESSAGE 1: VALIDATION & CONNECTION**
+  **SENTENCE 1: VALIDATION & CONNECTION**
   - Mirror their emotion with variety. Reflect on what they’re feeling.
   - Use new language each time. Don’t repeat the same language.
   
-**MESSAGE 2: PRACTICAL SUPPORT**
+**SENTENCE 2: PRACTICAL SUPPORT**
 - Offer ONE grounded, real-world suggestion (letter writing, giving space, setting boundaries, asking for help, writing things down).
 - If no solution feels right, just normalize the struggle and nudge the user gently to keep journaling.
-- Avoid broad advice like “have a calm conversation” — be more specific and helpful`;
+- End each response with a question to continue the conversation`;
   }
   
