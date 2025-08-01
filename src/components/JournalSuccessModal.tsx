@@ -78,7 +78,7 @@ export const JournalSuccessModal = memo(function JournalSuccessModal({
           transition={{ delay: 0.3 }}
           className="text-xl font-semibold text-gray-900 mb-3"
         >
-          
+          Your streak is saved!
         </motion.h3>
 
         {/* Message */}
