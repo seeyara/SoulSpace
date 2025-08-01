@@ -14,6 +14,8 @@ import { format } from 'date-fns';
 import axios from 'axios';
 import { event as gaEvent } from '@/lib/utils/gtag';
 import { storage } from '@/lib/storage';
+import { cuddlePrompts } from '@/data/cuddles';
+import { saveChatMessage } from '@/lib/utils/chatUtils';
 
 // Import mode toggle components
 import { JournalModeRadioToggle } from '@/components/JournalModeToggle';
@@ -26,6 +28,36 @@ export type JournalMode = 'flat' | 'guided';
 const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue or finish our conversation?";
 const INITIAL_GRATITUDE_PROMPT = "What are 5 things you are grateful for today?";
 const INTRO_MESSAGE = "Hello, I'm {{cuddle_name}}, your companion for this journey. Let's take this time to reset and rejuvenate";
+
+
+// Function to get the current day of the 21-day challenge
+const getDayOfChallenge = (): number => {
+  const challengeStartDate = new Date('2025-08-01'); // September 1st, 2024
+  const today = new Date();
+
+  // Calculate difference in days
+  const diffTime = today.getTime() - challengeStartDate.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  // Return day number (0-based), capped at 21 days
+  return Math.max(0, Math.min(diffDays, cuddlePrompts.length - 1));
+};
+
+// Function to get today's prompt
+const getTodaysPrompt = (): string => {
+  const challengeStartDate = new Date('2025-08-01');
+  const challengeEndDate = new Date('2025-08-21');
+  const today = new Date();
+
+  // If before or after challenge period, use the default gratitude prompt
+  if (today <= challengeStartDate || today >= challengeEndDate) {
+    return "What are 5 things you are grateful for today?";
+  }
+
+  // During challenge period, use sequential prompts
+  const dayIndex = getDayOfChallenge();
+  return cuddlePrompts[dayIndex] || cuddlePrompts[0];
+};
 
 function JournalContent() {
   const searchParams = useSearchParams();
@@ -69,7 +101,7 @@ function JournalContent() {
     } else {
       setJournalMode(mode);
       localStorage.setItem('journal-mode', mode);
-      
+
       if (mode === 'flat') {
         initializeFlatMode();
       }
@@ -83,7 +115,7 @@ function JournalContent() {
     const submissionKey = `journal-submitted-${today}`;
     const hasSubmitted = localStorage.getItem(submissionKey) === 'true';
     setHasSubmittedToday(hasSubmitted);
-    
+
     if (!hasSubmitted) {
       setMessages([]);
       setShowInput(false);
@@ -100,8 +132,15 @@ function JournalContent() {
   // Handle flat journal submission
   const handleFlatJournalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!flatJournalContent.trim() || !userId) return;
+
+    const userMessage = { role: 'user' as const, content: flatJournalContent.trim() };
+    const cuddleReply = { role: 'assistant' as const, content: "Thank you for sharing that with me" };
+
+    // Include intro messages in the conversation
+    const introMessage = { role: 'assistant' as const, content: INTRO_MESSAGE.replace("{{cuddle_name}}", getDisplayCuddleName(selectedCuddle)) };
+    const promptMessage = { role: 'assistant' as const, content: getTodaysPrompt() };
 
     try {
       gaEvent({
@@ -109,32 +148,63 @@ function JournalContent() {
         category: 'journal',
       });
 
-      // Direct DB call to save journal entry
-      const { error } = await supabase
-        .from(prefixedTable('chats'))
-        .insert({
-          user_id: userId,
-          cuddle_id: selectedCuddle,
-          messages: [{ role: 'user', content: flatJournalContent.trim() }],
-          date: format(new Date(), 'yyyy-MM-dd'),
-          mode: 'flat',
-        });
+      // Immediately update UI with user message
+      const newMessages = [...messages, introMessage, promptMessage, userMessage];
+      setMessages(newMessages);
+      setFlatJournalContent('');
+      setShowGratitudePrompt(false);
+      setShowIntroMessage(false);
 
-      if (error) {
-        console.error('Error saving flat journal entry:', error);
-        alert('Failed to save your journal entry. Please try again.');
-        return;
-      }
+      // Add cuddle reply after delay
+      setTimeout(async () => {
+        const finalMessages = [...newMessages, cuddleReply];
+        setMessages(finalMessages);
 
-      // Mark as submitted
-      const today = format(new Date(), 'yyyy-MM-dd');
-      localStorage.setItem(`journal-submitted-${today}`, 'true');
-      // setHasSubmittedToday(true);
-      // setFlatJournalContent('');
-      setShowSuccessModal(true);
+        // Save complete conversation to database using proper method
+        try {
+          const { error } = await saveChatMessage({
+            messages: finalMessages,
+            userId,
+            cuddleId: selectedCuddle
+          });
+
+          if (error) {
+            console.error('Error saving flat journal entry:', error);
+            alert('Failed to save your journal entry. Please try again.');
+            return;
+          }
+
+          // Mark as submitted only after successful save
+          const today = format(new Date(), 'yyyy-MM-dd');
+          localStorage.setItem(`journal-submitted-${today}`, 'true');
+          setHasSubmittedToday(true);
+          
+          // Show appropriate modal after 9 seconds based on user email status
+          setTimeout(() => {
+            const userEmail = storage.getEmail();
+            if (userEmail) {
+              // User has email - show success modal
+              setShowSuccessModal(true);
+            } else {
+              // User has no email - show streak modal for onboarding
+              setShowStreakModal(true);
+            }
+          }, 5000);
+
+        } catch (saveError) {
+          console.error('Error saving flat journal entry:', saveError);
+          alert('Failed to save your journal entry. Please try again.');
+        }
+      }, 1000);
+
     } catch (error) {
-      console.error('Error saving flat journal entry:', error);
-      alert('Failed to save your journal entry. Please try again.');
+      console.error('Error in flat journal submission:', error);
+      alert('Failed to process your journal entry. Please try again.');
+      // Reset UI state on error
+      setMessages(messages); // Revert to previous state
+      setFlatJournalContent(userMessage.content); // Restore user input
+      setShowGratitudePrompt(true);
+      setShowIntroMessage(true);
     }
   };
 
@@ -147,14 +217,14 @@ function JournalContent() {
         if (storedUserId) {
           console.log('Using stored user ID:', storedUserId);
           setUserId(storedUserId);
-          
+
           // Check if user has a custom name
           const { data } = await supabase
             .from(prefixedTable('users'))
             .select('name')
             .eq('id', storedUserId)
             .single();
-            
+
           setUserName(data?.name || 'Username');
           return;
         }
@@ -182,7 +252,7 @@ function JournalContent() {
             storage.setUserId(newUserId);
             setUserId(newUserId);
             setUserName('Username');
-            
+
             // Show privacy modal for new users
             setShowPrivacyModal(true);
           }
@@ -247,40 +317,57 @@ function JournalContent() {
           setMessages(data.messages);
           setHasMoreMessages(data.hasMore);
           setPage(1);
-          setIsWelcomeBack(true);
-          setShowInput(true);
-          setShowSuggestedReplies(false);
-          setJournalingMode(null);
-          console.log('Loaded previous messages:', data.messages);
 
-          // Add welcome back message and suggested replies
-          setMessages(prev => [
-            ...data.messages,
-            { role: 'assistant', content: WELCOME_BACK_MESSAGE }
-          ]);
-          setShowSuggestedReplies(true);
-        } else {
-          // New user or no entry for today
-          const cuddle = cuddleData.cuddles[selectedCuddle];
-          setIsTyping(true);
-          setTimeout(() => {
-            setMessages([
-              {
-                role: 'assistant',
-                content: `Hi! I’m ${getCuddleName(selectedCuddle)}, I'm always here when your mind feels a little too full. Let's take it slow and gently sort through your thoughts together..`
-              },
-              {
-                role: 'assistant',
-                content: "What's on your mind today?"
-              }
-            ]);
-            setIsTyping(false);
-            setShowSuggestedReplies(false);
-            setIsWelcomeBack(false);
+          // Check if this is a flat journal entry
+          if (data.mode === 'flat') {
+            // For flat journal, just show the entry in chat without welcome back message
+            setIsWelcomeBack(true);
             setShowInput(true);
+            setShowSuggestedReplies(false);
+            setJournalingMode('free-form');
+            console.log('Loaded flat journal entry:', data.messages);
+          } else {
+            // For guided journal, show welcome back message
+            setIsWelcomeBack(true);
+            setShowInput(true);
+            setShowSuggestedReplies(false);
             setJournalingMode('guided');
-            console.log('Started new user flow');
-          }, 1000);
+            console.log('Loaded previous messages:', data.messages);
+
+            // Add welcome back message and suggested replies
+            setMessages(prev => [
+              ...data.messages,
+              { role: 'assistant', content: WELCOME_BACK_MESSAGE }
+            ]);
+            setShowSuggestedReplies(true);
+          }
+        } else {
+          if (journalMode === 'guided') {
+            // New user or no entry for today
+            const cuddle = cuddleData.cuddles[selectedCuddle];
+            setIsTyping(true);
+            setTimeout(() => {
+              setMessages([
+                {
+                  role: 'assistant',
+                  content: `Hi! I’m ${getCuddleName(selectedCuddle)}, I'm always here when your mind feels a little too full. Let's take it slow and gently sort through your thoughts together..`
+                },
+                {
+                  role: 'assistant',
+                  content: "What's on your mind today?"
+                }
+              ]);
+              setIsTyping(false);
+              setShowSuggestedReplies(false);
+              setIsWelcomeBack(false);
+              setShowInput(true);
+              setJournalingMode('guided');
+              console.log('Started new user flow');
+            }, 1000);
+          } else {
+            // New user or no entry for today - let mode-specific initialization handle this
+            console.log('Fresh user - waiting for mode-specific initialization');
+          }
         }
       } catch (error) {
         console.error('Error fetching chat history:', error);
@@ -308,7 +395,7 @@ function JournalContent() {
       }
     };
     fetchChatHistory();
-  }, [selectedCuddle, selectedDate, userId, showPrivacyModal]);
+  }, [selectedCuddle, selectedDate, userId, showPrivacyModal, journalMode]);
 
   // Separate effect to handle privacy modal state changes
   useEffect(() => {
@@ -323,7 +410,7 @@ function JournalContent() {
               .select('temp_session_id')
               .eq('id', storedUserId)
               .single();
-            
+
             if (data?.temp_session_id) {
               // This is a new user, start the conversation
               const cuddle = cuddleData.cuddles[selectedCuddle];
@@ -340,7 +427,7 @@ function JournalContent() {
             console.error('Error checking if new user:', error);
           }
         };
-        
+
         checkIfNewUser();
       }
     }
@@ -414,16 +501,16 @@ function JournalContent() {
 
       let response;
       try {
-         response = await axios.post('/api/chat-completion', {
+        response = await axios.post('/api/chat-completion', {
           message: userMessage.content,
           cuddleId: selectedCuddle,
           messageHistory: messageHistoryToSend
-         },{
+        }, {
           headers: {
             'Content-Type': 'application/json',
             'x-user-profile': userProfile ? JSON.stringify(userProfile) : ''
           },
-         })
+        })
       } catch (error) {
         console.error('Error:', error);
       }
@@ -523,7 +610,7 @@ function JournalContent() {
       setShowInput(false);
       setIsTyping(true);
       setJournalingMode('free-form');
-      
+
       setTimeout(() => {
         setMessages(prev => [
           ...prev,
@@ -535,7 +622,7 @@ function JournalContent() {
         ]);
         setIsTyping(false);
         setShowSuggestedReplies(true);
-        
+
         // Show streak modal after the thank you message
         setTimeout(() => {
           setShowStreakModal(true);
@@ -570,12 +657,12 @@ function JournalContent() {
     // Check localStorage first for custom cuddle name
     const customName = storage.getCuddleName();
     const storedCuddleId = storage.getCuddleId();
-    
+
     // If we have a custom name and it matches the current cuddle, use it
     if (customName && storedCuddleId === id) {
       return customName;
     }
-    
+
     // Otherwise, fall back to the generic name
     return getCuddleName(id);
   };
@@ -729,7 +816,7 @@ function JournalContent() {
           if (data?.messages && data.messages.length > 0) {
             // Preserve scroll position
             const prevHeight = container.scrollHeight;
-            
+
             setMessages(prev => [...data.messages, ...prev]);
             setPage(prev => prev + 1);
 
@@ -752,6 +839,7 @@ function JournalContent() {
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
   }, [page, isLoadingMore, hasMoreMessages]);
+
 
   useEffect(() => {
     const saveOnUnload = () => {
@@ -802,7 +890,7 @@ function JournalContent() {
     gender?: string;
     lifeStage?: string;
   }
-  
+
   const isProfileComplete = (profile: UserProfile | null | undefined): boolean => {
     return Boolean(profile?.cuddleOwnership && profile?.gender && profile?.lifeStage);
   };
@@ -813,7 +901,7 @@ function JournalContent() {
     if (savedMode && ['flat', 'guided'].includes(savedMode)) {
       setJournalMode(savedMode);
     }
-    
+
     // Initialize flat mode if selected
     if (userId && (savedMode === 'flat' || journalMode === 'flat') && !isWelcomeBack) {
       initializeFlatMode();
@@ -827,7 +915,7 @@ function JournalContent() {
       let profile = null;
       try {
         profile = profileStr ? JSON.parse(profileStr) : null;
-      } catch {}
+      } catch { }
       if (!isProfileComplete(profile)) {
         setShowPrivacyModal(true);
       } else {
@@ -843,7 +931,7 @@ function JournalContent() {
       let profile = null;
       try {
         profile = profileStr ? JSON.parse(profileStr) : null;
-      } catch {}
+      } catch { }
       if (!isProfileComplete(profile)) {
         setShowPrivacyModal(true);
       } else {
@@ -931,12 +1019,72 @@ function JournalContent() {
                   <div className="flex-1">
                     <div className="bg-primary/10 rounded-2xl rounded-tl-md px-6 py-4">
                       <p className="text-primary leading-relaxed font-medium">
-                        {INITIAL_GRATITUDE_PROMPT}
+                        {getTodaysPrompt()}
                       </p>
                     </div>
                   </div>
                 </motion.div>
               )}
+            </AnimatePresence>
+
+            {/* Display messages in flat journal mode */}
+            <AnimatePresence>
+              {messages.length > 0 && messages.map((message, index) => {
+                const isLastAssistantMessage = message.role === 'assistant' &&
+                  (index === messages.length - 1 || messages[index + 1]?.role === 'user');
+                const isFirstAssistantMessage = message.role === 'assistant' &&
+                  (index === 0 || messages[index - 1]?.role === 'user');
+
+                if (message.role === 'user') {
+                  return (
+                    <motion.div
+                      key={`flat-message-${index}`}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      className="flex justify-end mb-6"
+                    >
+                      <div className="flex flex-col max-w-[85%] items-end">
+                        <div className="p-4 rounded-2xl bg-primary text-white">
+                          {message.content}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                } else {
+                  return (
+                    <motion.div
+                      key={`flat-message-${index}`}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      className="flex justify-start gap-3 mb-6"
+                    >
+                      <div className="flex-shrink-0 w-10 flex justify-center items-start">
+                        {isFirstAssistantMessage && (
+                          <Image
+                            src={getCuddleImage(selectedCuddle)}
+                            alt={getCuddleName(selectedCuddle)}
+                            width={40}
+                            height={40}
+                            className="h-10 w-10 rounded-full"
+                          />
+                        )}
+                      </div>
+                      <div className="flex flex-col max-w-[85%] items-start">
+                        <div className="p-4 rounded-2xl bg-primary/10 text-primary">
+                          {message.content}
+                        </div>
+                        {isLastAssistantMessage && (
+                          <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
+                            {getDisplayCuddleName(selectedCuddle)} 💭
+                          </span>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                }
+              })}
             </AnimatePresence>
 
             {/* Flat Journal Input */}
@@ -953,25 +1101,21 @@ function JournalContent() {
                       <textarea
                         value={flatJournalContent}
                         onChange={(e) => setFlatJournalContent(e.target.value)}
-                        placeholder="Take your time and share what's on your mind..."
+                        placeholder={`Hey ${selectedCuddle} this is ....\n\nLately I've been...`}
                         maxLength={10000}
                         className="w-full px-6 py-4 border-2 border-primary/20 rounded-2xl resize-none focus:outline-none focus:border-primary placeholder:text-gray-400 text-primary leading-relaxed min-h-[200px] text-base bg-white"
                         style={{ minHeight: '200px', fontFamily: 'inherit' }}
                       />
-                      <div className="absolute bottom-4 right-4 text-xs text-gray-400">
-                        {flatJournalContent.length}/10000
-                      </div>
                     </div>
 
                     <div className="flex justify-center">
                       <button
                         type="submit"
                         disabled={!flatJournalContent.trim()}
-                        className={`px-8 py-3 rounded-2xl font-medium transition-all duration-200 ${
-                          flatJournalContent.trim()
+                        className={`px-8 py-3 rounded-2xl font-medium transition-all duration-200 ${flatJournalContent.trim()
                             ? 'bg-primary text-white hover:bg-primary/90 focus:ring-2 focus:ring-primary focus:ring-opacity-50 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
                             : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        } focus:outline-none`}
+                          } focus:outline-none`}
                       >
                         Send
                       </button>
@@ -979,7 +1123,7 @@ function JournalContent() {
                   </form>
                 </motion.div>
               )}
-        
+
               {/* {hasSubmittedToday && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -1006,138 +1150,138 @@ function JournalContent() {
         ) : (
           // Guided Journal Mode (existing chat interface)
           <div className="max-w-3xl mx-auto space-y-4 px-4 pt-20 pb-24">
-          {isLoadingMore && (
-            <div className="flex justify-center py-4">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-            </div>
-          )}
-          {isWelcomeBack && messages.length > 0 && (
-            <div className="mb-4 text-primary font-medium text-lg">Here’s what you shared earlier today…</div>
-          )}
-          <AnimatePresence>
-            {messages.map((message, index) => {
-              const isLastAssistantMessage = message.role === 'assistant' &&
-                (index === messages.length - 1 || messages[index + 1]?.role === 'user');
-              const isFirstAssistantMessage = message.role === 'assistant' &&
-                (index === 0 || messages[index - 1]?.role === 'user');
-
-              if (message.role === 'user') {
-                return (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    className="flex justify-end"
-                  >
-                    <div className="flex flex-col max-w-[85%] items-end">
-                      <div
-                        className="p-4 rounded-2xl bg-primary text-white"
-                      >
-                        {message.content}
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              } else { // Assistant message
-                return (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    className="flex justify-start gap-3"
-                  >
-                    {/* Icon column */}
-                    <div className="flex-shrink-0 w-10 flex justify-center items-start">
-                      {isFirstAssistantMessage && (
-                        <Image
-                          src={getCuddleImage(selectedCuddle)}
-                          alt={getCuddleName(selectedCuddle)}
-                          width={40}
-                          height={40}
-                          className="h-10 w-10 rounded-full"
-                        />
-                      )}
-                    </div>
-
-                    {/* Message content and name column */}
-                    <div className="flex flex-col max-w-[85%] items-start">
-                      <div
-                        className="p-4 rounded-2xl bg-primary/10 text-primary"
-                      >
-                        {message.content}
-                      </div>
-                      {isLastAssistantMessage && (
-                        <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
-                          {getDisplayCuddleName(selectedCuddle)} 💭
-                        </span>
-                      )}
-                      {/* Show suggested replies only if not welcome back message and not in journaling mode */}
-                      {/* Mode selection and suggested replies removed */}
-                      {/* Show Continue/End chat only for welcome back message */}
-                      {isLastAssistantMessage && message.content === WELCOME_BACK_MESSAGE && (
-                        <div className="mt-3 flex flex-row gap-4 w-full">
-                          <button
-                            onClick={handleFinishEntry}
-                            className="text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-2xl font-medium hover:bg-primary/5 transition-colors flex-1"
-                          >
-                            End chat
-                          </button>
-                          <button
-                            onClick={handleContinue}
-                            className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors flex-1"
-                          >
-                            Continue
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              }
-            })}
-          </AnimatePresence>
-
-          {/* Typing Indicator */}
-          <AnimatePresence>
-            {isTyping && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="flex justify-start gap-3"
-              >
-                <div className="flex-shrink-0 w-10 flex justify-center items-start">
-                  <Image
-                    src={getCuddleImage(selectedCuddle)}
-                    alt={getCuddleName(selectedCuddle)}
-                    width={40}
-                    height={40}
-                    className="h-10 w-10 rounded-full"
-                  />
-                </div>
-                <div className="flex flex-col max-w-[85%] items-start">
-                  <div className="p-4 rounded-2xl bg-primary/10 text-primary">
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  </div>
-                  <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
-                    {getDisplayCuddleName(selectedCuddle)} is typing...
-                  </span>
-                </div>
-              </motion.div>
+            {isLoadingMore && (
+              <div className="flex justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+              </div>
             )}
-          </AnimatePresence>
+            {isWelcomeBack && messages.length > 0 && (
+              <div className="mb-4 text-primary font-medium text-lg">Here’s what you shared earlier today…</div>
+            )}
+            <AnimatePresence>
+              {messages.map((message, index) => {
+                const isLastAssistantMessage = message.role === 'assistant' &&
+                  (index === messages.length - 1 || messages[index + 1]?.role === 'user');
+                const isFirstAssistantMessage = message.role === 'assistant' &&
+                  (index === 0 || messages[index - 1]?.role === 'user');
 
-          {/* Add ref for auto-scrolling */}
+                if (message.role === 'user') {
+                  return (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      className="flex justify-end"
+                    >
+                      <div className="flex flex-col max-w-[85%] items-end">
+                        <div
+                          className="p-4 rounded-2xl bg-primary text-white"
+                        >
+                          {message.content}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                } else { // Assistant message
+                  return (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      className="flex justify-start gap-3"
+                    >
+                      {/* Icon column */}
+                      <div className="flex-shrink-0 w-10 flex justify-center items-start">
+                        {isFirstAssistantMessage && (
+                          <Image
+                            src={getCuddleImage(selectedCuddle)}
+                            alt={getCuddleName(selectedCuddle)}
+                            width={40}
+                            height={40}
+                            className="h-10 w-10 rounded-full"
+                          />
+                        )}
+                      </div>
+
+                      {/* Message content and name column */}
+                      <div className="flex flex-col max-w-[85%] items-start">
+                        <div
+                          className="p-4 rounded-2xl bg-primary/10 text-primary"
+                        >
+                          {message.content}
+                        </div>
+                        {isLastAssistantMessage && (
+                          <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
+                            {getDisplayCuddleName(selectedCuddle)} 💭
+                          </span>
+                        )}
+                        {/* Show suggested replies only if not welcome back message and not in journaling mode */}
+                        {/* Mode selection and suggested replies removed */}
+                        {/* Show Continue/End chat only for welcome back message */}
+                        {isLastAssistantMessage && message.content === WELCOME_BACK_MESSAGE && (
+                          <div className="mt-3 flex flex-row gap-4 w-full">
+                            <button
+                              onClick={handleFinishEntry}
+                              className="text-primary/70 border-2 border-primary/20 px-6 py-3 rounded-2xl font-medium hover:bg-primary/5 transition-colors flex-1"
+                            >
+                              End chat
+                            </button>
+                            <button
+                              onClick={handleContinue}
+                              className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors flex-1"
+                            >
+                              Continue
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                }
+              })}
+            </AnimatePresence>
+
+            {/* Typing Indicator */}
+            <AnimatePresence>
+              {isTyping && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="flex justify-start gap-3"
+                >
+                  <div className="flex-shrink-0 w-10 flex justify-center items-start">
+                    <Image
+                      src={getCuddleImage(selectedCuddle)}
+                      alt={getCuddleName(selectedCuddle)}
+                      width={40}
+                      height={40}
+                      className="h-10 w-10 rounded-full"
+                    />
+                  </div>
+                  <div className="flex flex-col max-w-[85%] items-start">
+                    <div className="p-4 rounded-2xl bg-primary/10 text-primary">
+                      <div className="flex gap-1">
+                        <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    </div>
+                    <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
+                      {getDisplayCuddleName(selectedCuddle)} is typing...
+                    </span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Add ref for auto-scrolling */}
             <div ref={messagesEndRef} />
           </div>
         )}
-        
+
         {/* User Response Input - only show for guided mode */}
         {journalMode === 'guided' && showInput && (
           <div className="flex justify-end">
@@ -1245,18 +1389,18 @@ function JournalContent() {
               className="w-full h-full object-cover"
             />
           </div>
-          
+
           <h3 className="text-xl font-semibold text-gray-900 mb-4">
             Switch to Guided Journaling?
           </h3>
-            
-            <div className="bg-secondary border border-primary/10 rounded-lg p-4 mb-4">
-              <p className="text-sm">
-                Guided Journalling is experimental and uses GPT to guide reflection.
-                <br />For medical advice, please seek professional help.
-              </p>
-            </div>
-          
+
+          <div className="bg-secondary border border-primary/10 rounded-lg p-4 mb-4">
+            <p className="text-sm">
+              Guided Journalling is experimental and uses GPT to guide reflection.
+              <br />For medical advice, please seek professional help.
+            </p>
+          </div>
+
           <div className="flex flex-col space-y-3">
             <button
               onClick={() => {

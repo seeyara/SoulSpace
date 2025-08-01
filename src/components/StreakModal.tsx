@@ -228,7 +228,7 @@ export default function StreakModal({ isOpen, onClose, userId }: StreakModalProp
               transition={{ delay: 0.6 }}
             >
               <p className="text-gray-600 mb-6">
-                Want a little nudge so you never miss your next chat with Cuddle™?</p>
+                Want to save your streak so you never miss your next chat with Cuddle™?</p>
               
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div>
