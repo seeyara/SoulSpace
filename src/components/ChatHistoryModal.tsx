@@ -143,12 +143,12 @@ export default function ChatHistoryModal({
                   <p className="text-gray-500 mb-6">
                     {getEmptyStateMessage().message}
                   </p>
-                  {!isFuture(new Date(date)) && (
+                  {isToday(new Date(date)) && (
                   <button
                     onClick={onStartJournaling}
                     className="bg-primary text-white px-6 py-3 rounded-full text-base font-medium hover:bg-primary/90 transition-colors"
                   >
-                      {isToday(new Date(date)) ? "Start Today's Entry" : "Add Entry for This Day"}
+                      Start Today's Entry
                   </button>
                   )}
                 </div>

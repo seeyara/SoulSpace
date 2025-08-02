@@ -22,12 +22,13 @@ import { saveChatMessage, generateJournalResponse } from '@/lib/utils/chatUtils'
 import { JournalModeRadioToggle } from '@/components/JournalModeToggle';
 import { JournalSuccessModal } from '@/components/JournalSuccessModal';
 import BaseModal from '@/components/BaseModal';
+import TypingIndicator from '@/components/TypingIndicator';
 
 // Journal mode type
 export type JournalMode = 'flat' | 'guided';
 
 const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue or finish our conversation?";
-const INITIAL_GRATITUDE_PROMPT = "What are 5 things you are grateful for today?";
+// const INITIAL_GRATITUDE_PROMPT = "What are 5 things you are grateful for today?";
 const INTRO_MESSAGE = "Hello, I'm {{cuddle_name}}, your companion for this journey. Let's take this time to reset and rejuvenate";
 
 
@@ -95,7 +96,6 @@ function JournalContent() {
   const [showIntroMessage, setShowIntroMessage] = useState(false);
   const [showGratitudePrompt, setShowGratitudePrompt] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
 
   // Handle mode change
   const handleModeChange = (mode: JournalMode) => {
@@ -153,9 +153,8 @@ function JournalContent() {
         category: 'journal',
       });
 
-      // Immediately update UI with user message and typing indicator
-      const typingMessage = { role: 'assistant' as const, content: '...' };
-      const newMessages = [...messages, introMessage, promptMessage, userMessage, typingMessage];
+      // Immediately update UI with user message and show typing indicator
+      const newMessages = [...messages, introMessage, promptMessage, userMessage];
       setMessages(newMessages);
       setFlatJournalContent('');
       setShowGratitudePrompt(false);
@@ -164,8 +163,6 @@ function JournalContent() {
 
       // Generate AI response
       setTimeout(async () => {
-        let finalMessages;
-
         try {
           const aiResponse = await generateJournalResponse(
             getTodaysPrompt(),
@@ -173,75 +170,74 @@ function JournalContent() {
             getDisplayCuddleName(selectedCuddle)
           );
 
-          const cuddleReply = { role: 'assistant' as const, content: aiResponse };
-          // Replace typing message with actual AI response
-          finalMessages = [...newMessages.slice(0, -1), cuddleReply];;
+          // Split response into sentences and create two messages
+          const sentences = aiResponse.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+          const firstMessage = sentences.slice(0, Math.ceil(sentences.length / 2)).join(' ');
+          const secondMessage = sentences.slice(Math.ceil(sentences.length / 2)).join(' ');
+
+          // Create final messages array upfront
+          const firstReply = { role: 'assistant' as const, content: firstMessage };
+          const secondReply = { role: 'assistant' as const, content: secondMessage };
+          const finalMessages = [...newMessages, firstReply, secondReply];
+
+          // UI flow: Show first message
+          const messagesWithFirst = [...newMessages, firstReply];
+          setMessages(messagesWithFirst);
+
+          setTimeout(() => {
+            setTimeout(() => {
+              setMessages(finalMessages);
+              setIsTyping(false);
+            }, 1500);
+          }, 2000);
+
+          // Save messages (independent of UI timing)
+          try {
+            const { error } = await saveChatMessage({
+              messages: finalMessages,
+              userId,
+              cuddleId: selectedCuddle
+            });
+
+            if (error) {
+              console.error('Error saving flat journal entry:', error);
+              setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
+              return;
+            }
+
+            // Mark as submitted and show modal
+            const today = format(new Date(), 'yyyy-MM-dd');
+            localStorage.setItem(`journal-submitted-${today}`, 'true');
+            setHasSubmittedToday(true);
+
+          } catch (saveError) {
+            console.error('Error saving flat journal entry:', saveError);
+            setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
+          }
+
         } catch (aiError) {
           console.error('Error generating AI response:', aiError);
           const fallbackReply = { role: 'assistant' as const, content: "Thank you for sharing this, it means so much to me 🫶🏼. Im always here for you" };
-          finalMessages = [...newMessages.slice(0, -1), fallbackReply];
-        } setMessages(finalMessages);
-        setIsGeneratingResponse(false);
+          const fallbackMessages = [...newMessages, fallbackReply];
+          setMessages(fallbackMessages);
+          setIsTyping(false);
 
-        try {
-          const { error } = await saveChatMessage({
-            messages: finalMessages,
-            userId,
-            cuddleId: selectedCuddle
-          });
-
-          if (error) {
-            // Sentry.captureException(error, { 
-            //   extra: { 
-            //     context: 'flat_journal_save',
-            //     userId,
-            //     cuddleId: selectedCuddle,
-            //     messageCount: finalMessages.length,
-            //     messageLength: finalMessages.reduce((acc, msg) => acc + msg.content.length, 0),
-            //     timestamp: new Date().toISOString(),
-            //     userAgent: navigator.userAgent,
-            //     error: error
-            //   },
-            //   tags: {
-            //     feature: 'flat_journal',
-            //     action: 'save_chat_message'
-            //   }
-            // });
-            console.error('Error saving flat journal entry:', error);
+          // Save fallback message
+          try {
+            await saveChatMessage({
+              messages: fallbackMessages,
+              userId,
+              cuddleId: selectedCuddle
+            });
+            
+            const today = format(new Date(), 'yyyy-MM-dd');
+            localStorage.setItem(`journal-submitted-${today}`, 'true');
+            setHasSubmittedToday(true);
+          } catch (error) {
             setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
-            return;
           }
-
-          // Mark as submitted only after successful save
-          const today = format(new Date(), 'yyyy-MM-dd');
-          localStorage.setItem(`journal-submitted-${today}`, 'true');
-          setHasSubmittedToday(true);
-
-          // Show appropriate modal after 5 seconds based on user email status
-          setTimeout(() => {
-            const userEmail = storage.getEmail();
-
-            userEmail ? setShowSuccessModal(true) : setShowStreakModal(true);
-          }, 5000);
-
-        } catch (saveError) {
-          // Sentry.captureException(saveError, { 
-          //   extra: { 
-          //     context: 'flat_journal_save_timeout',
-          //     userId,
-          //     cuddleId: selectedCuddle,
-          //     messageCount: finalMessages.length,
-          //     timestamp: new Date().toISOString(),
-          //     saveError: saveError
-          //   },
-          //   tags: {
-          //     feature: 'flat_journal',
-          //     action: 'save_timeout'
-          //   }
-          // });
-          console.error('Error saving flat journal entry:', saveError);
-          setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
         }
+
       }, 1000);
 
     } catch (error) {
@@ -616,9 +612,6 @@ function JournalContent() {
         cuddle: selectedCuddle
       });
       if (shouldEnd) {
-        setTimeout(() => {
-          setShowStreakModal(true);
-        }, 1500);
         return;
       }
       setShowInput(true);
@@ -685,9 +678,6 @@ function JournalContent() {
         setShowSuggestedReplies(true);
 
         // Show streak modal after the thank you message
-        setTimeout(() => {
-          setShowStreakModal(true);
-        }, 1500);
       }, 1000);
 
     } catch (error) {
@@ -799,9 +789,6 @@ function JournalContent() {
           }),
         });
 
-        setTimeout(() => {
-          setShowStreakModal(true);
-        }, 1500);
       } catch (error) {
         console.error('Error saving chat:', error);
       }
@@ -1105,6 +1092,7 @@ function JournalContent() {
                   (index === messages.length - 1 || messages[index + 1]?.role === 'user');
                 const isFirstAssistantMessage = message.role === 'assistant' &&
                   (index === 0 || messages[index - 1]?.role === 'user');
+                const isLastMessage = index === messages.length - 1;
 
                 if (message.role === 'user') {
                   return (
@@ -1151,11 +1139,36 @@ function JournalContent() {
                             {getDisplayCuddleName(selectedCuddle)} 💭
                           </span>
                         )}
+                        {isLastMessage && hasSubmittedToday && !isTyping && (
+                          <div className="mt-4 ml-2">
+                            <button
+                              onClick={() => {
+                                const userEmail = storage.getEmail();
+                                userEmail ? setShowSuccessModal(true) : setShowStreakModal(true);
+                              }}
+                              className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 flex items-center gap-2"
+                            >
+                              <span>Save my streak 🔥</span>
+                              
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   );
                 }
               })}
+            </AnimatePresence>
+
+            {/* Typing Indicator for Flat Journal Mode */}
+            <AnimatePresence>
+              {isTyping && journalMode === 'flat' && (
+                <TypingIndicator
+                  cuddleImage={getCuddleImage(selectedCuddle)}
+                  cuddleName={getCuddleName(selectedCuddle)}
+                  displayName={getDisplayCuddleName(selectedCuddle)}
+                />
+              )}
             </AnimatePresence>
 
             {/* Flat Journal Input */}
@@ -1235,6 +1248,7 @@ function JournalContent() {
                   (index === messages.length - 1 || messages[index + 1]?.role === 'user');
                 const isFirstAssistantMessage = message.role === 'assistant' &&
                   (index === 0 || messages[index - 1]?.role === 'user');
+                const isLastMessage = index === messages.length - 1;
 
                 if (message.role === 'user') {
                   return (
@@ -1307,6 +1321,19 @@ function JournalContent() {
                             </button>
                           </div>
                         )}
+                        {isLastMessage && !showInput && !isTyping && message.content !== WELCOME_BACK_MESSAGE && (
+                          <div className="mt-4 ml-2">
+                            <button
+                              onClick={() => {
+                                const userEmail = storage.getEmail();
+                                userEmail ? setShowSuccessModal(true) : setShowStreakModal(true);
+                              }}
+                              className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 flex items-center gap-2"
+                            >
+                              <span>Save my streak 🔥</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   );
@@ -1316,35 +1343,12 @@ function JournalContent() {
 
             {/* Typing Indicator */}
             <AnimatePresence>
-              {isTyping && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  className="flex justify-start gap-3"
-                >
-                  <div className="flex-shrink-0 w-10 flex justify-center items-start">
-                    <Image
-                      src={getCuddleImage(selectedCuddle)}
-                      alt={getCuddleName(selectedCuddle)}
-                      width={40}
-                      height={40}
-                      className="h-10 w-10 rounded-full"
-                    />
-                  </div>
-                  <div className="flex flex-col max-w-[85%] items-start">
-                    <div className="p-4 rounded-2xl bg-primary/10 text-primary">
-                      <div className="flex gap-1">
-                        <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <div className="w-2 h-2 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </div>
-                    </div>
-                    <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
-                      {getDisplayCuddleName(selectedCuddle)} is typing...
-                    </span>
-                  </div>
-                </motion.div>
+              {isTyping && journalMode === 'guided' && (
+                <TypingIndicator
+                  cuddleImage={getCuddleImage(selectedCuddle)}
+                  cuddleName={getCuddleName(selectedCuddle)}
+                  displayName={getDisplayCuddleName(selectedCuddle)}
+                />
               )}
             </AnimatePresence>
 
