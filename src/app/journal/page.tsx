@@ -380,23 +380,13 @@ function JournalContent() {
             // For flat journal, just show the entry in chat without welcome back message
             setIsWelcomeBack(true);
             setShowInput(true);
-            setShowSuggestedReplies(false);
+            setShowSuggestedReplies(true);
             setJournalingMode('free-form');
             console.log('Loaded flat journal entry:', data.messages);
           } else {
-            // For guided journal, show welcome back message
-            setIsWelcomeBack(true);
             setShowInput(true);
             setShowSuggestedReplies(false);
             setJournalingMode('guided');
-            console.log('Loaded previous messages:', data.messages);
-
-            // Add welcome back message and suggested replies
-            setMessages(prev => [
-              ...data.messages,
-              { role: 'assistant', content: WELCOME_BACK_MESSAGE }
-            ]);
-            setShowSuggestedReplies(true);
           }
         } else {
           if (journalMode === 'guided') {

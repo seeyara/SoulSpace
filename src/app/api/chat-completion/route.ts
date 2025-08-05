@@ -125,14 +125,21 @@ export const POST = withRedisRateLimit({
     console.log('Temperature:', 0.5);
     console.log('Max Tokens:', 200);
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: openAiMessages,
-      temperature: 0.5,
-      max_tokens: 200
-    });
+    let completion;
+    try {
+      completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: openAiMessages,
+        temperature: 0.5,
+        max_tokens: 200
+      });
+    } catch (error) {
+      console.error('=== OPENAI API ERROR ===');
+      console.error('Error Type:', error);
+      throw error;
+    }
 
-    const aiResponse = completion.choices[0].message.content || 'I\'m here to listen.';
+    const aiResponse = completion.choices[0]?.message?.content || 'Thank you for sharing this, it means so much to me 🫶🏼. Im always here for you';
 
     // Log OpenAI response details
     console.log('=== OPENAI API RESPONSE ===');

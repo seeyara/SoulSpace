@@ -274,7 +274,8 @@ Avoid sounding preachy, overly formal, or dramatic — aim for friendly and huma
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      console.log(response.status, response);
+      
     }
 
     const data = await response.json();
