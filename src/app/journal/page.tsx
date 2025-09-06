@@ -124,7 +124,7 @@ function JournalContent() {
     }
   };
 
-  const getChatHistory = async (date:string) => {
+  const getChatHistory = async (date: string) => {
     // Get userId and tempSessionId from localStorage
     const storedUserId = storage.getUserId();
     const tempSessionId = storage.getSessionId();
@@ -147,7 +147,8 @@ function JournalContent() {
       // If chat history exists, load it into the chat
       if (data?.messages && data.messages.length > 0) {
         setMessages(data.messages);
-        setShowInput(true); // Enable input for continuing the conversation
+        setIsTyping(false);
+        // setShowInput(true); // Enable input for continuing the conversation
         console.log('Loaded chat history:', data.messages);
       } else {
         console.log('No chat history found for userId or tempSessionId');
@@ -156,7 +157,7 @@ function JournalContent() {
     } catch (error) {
       console.error('Error fetching chat history:', error);
     }
-    return 
+    return
   }
 
   // Handle flat journal submission
@@ -239,7 +240,6 @@ function JournalContent() {
 
         const today = format(new Date(), 'yyyy-MM-dd');
         localStorage.setItem(`journal-submitted-${today}`, 'true');
-        setHasSubmittedToday(true);
 
       } catch (saveError) {
         console.error('Error saving flat journal entry:', saveError);
@@ -1035,7 +1035,7 @@ function JournalContent() {
                   <div className="flex-1">
                     <div className="bg-primary/10 rounded-2xl rounded-tl-md px-6 py-4">
                       <p className="text-primary leading-relaxed font-medium">
-                       {getTodaysPrompt()}
+                        {getTodaysPrompt()}
                       </p>
                     </div>
                   </div>
@@ -1097,12 +1097,13 @@ function JournalContent() {
                             {getDisplayCuddleName(selectedCuddle)} 💭
                           </span>
                         )}
-                        {isLastMessage && hasSubmittedToday && !isTyping && (
+                        {isLastMessage && !hasSubmittedToday && !isTyping && (
                           <div className="mt-4 ml-2">
                             <button
                               onClick={() => {
                                 const userEmail = storage.getEmail();
                                 userEmail ? setShowSuccessModal(true) : setShowStreakModal(true);
+                                setHasSubmittedToday(true); // Mark as submitted today
                               }}
                               className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 flex items-center gap-2"
                             >
