@@ -1,5 +1,7 @@
 // Access control utilities for the journal application
 
+import { storage } from "./storage";
+
 export interface AccessStatus {
   hasAccess: boolean;
   email: string | null;
@@ -15,7 +17,7 @@ export const accessControl = {
       };
     }
 
-    const email = localStorage.getItem('soulspace_user_email');
+    const email = storage.getEmail();
 
     return {
       hasAccess: !!email,
@@ -26,13 +28,15 @@ export const accessControl = {
   // Grant access to user with email
   grantAccess: (email: string) => {
     if (typeof window === 'undefined') return;
-    localStorage.setItem('soulspace_user_email', email);
+    storage.setEmail(email);
   },
 
   // Clear all access data
   clearAll: () => {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem('soulspace_user_email');
+    storage.removeEmail();
+    storage.removeUserId();
+    storage.removeSessionId();
   },
 
   // Check if user needs to show the access modal

@@ -10,13 +10,13 @@ import type { CuddleId } from '@/types/api';
 import StreakModal from '@/components/StreakModal';
 import PrivacyModal from '@/components/PrivacyModal';
 import { useRouter } from 'next/navigation';
-import { format, set } from 'date-fns';
+import { format, isToday, set } from 'date-fns';
 import axios from 'axios';
 import { event as gaEvent } from '@/lib/utils/gtag';
+import { upsertUser } from '@/lib/utils/journalDb';
 import { storage } from '@/lib/storage';
 import { cuddlePrompts } from '@/data/cuddles';
-import { saveChatMessage, generateJournalResponse } from '@/lib/utils/chatUtils';
-// import * as Sentry from '@sentry/nextjs';
+import { fetchChatHistory, saveChatMessage, generateJournalResponse } from '@/lib/utils/chatUtils';
 
 // Import mode toggle components
 import { JournalModeRadioToggle } from '@/components/JournalModeToggle';
@@ -28,9 +28,7 @@ import TypingIndicator from '@/components/TypingIndicator';
 export type JournalMode = 'flat' | 'guided';
 
 const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue or finish our conversation?";
-// const INITIAL_GRATITUDE_PROMPT = "What are 5 things you are grateful for today?";
 const INTRO_MESSAGE = "Hello, I'm {{cuddle_name}}, your companion for this journey. Let's take this time to reset and rejuvenate";
-
 
 // Function to get the current day of the 21-day challenge
 const getDayOfChallenge = (): number => {
@@ -47,19 +45,11 @@ const getDayOfChallenge = (): number => {
 
 // Function to get today's prompt
 const getTodaysPrompt = (): string => {
-  const challengeStartDate = new Date('2025-08-01');
-  const challengeEndDate = new Date('2025-08-21');
-  const today = new Date();
-
-  // If before or after challenge period, use the default gratitude prompt
-  if (today <= challengeStartDate || today >= challengeEndDate) {
-    return "What are 5 things you are grateful for today?";
-  }
-
   // During challenge period, use sequential prompts
   const dayIndex = getDayOfChallenge();
   return cuddlePrompts[dayIndex] || cuddlePrompts[0];
 };
+
 
 function JournalContent() {
   const searchParams = useSearchParams();
@@ -129,8 +119,45 @@ function JournalContent() {
         setShowIntroMessage(true);
         setShowGratitudePrompt(true);
       }, 800);
+    } else {
+      getChatHistory(today);
     }
   };
+
+  const getChatHistory = async (date:string) => {
+    // Get userId and tempSessionId from localStorage
+    const storedUserId = storage.getUserId();
+    const tempSessionId = storage.getSessionId();
+
+    // If neither exists, return early
+    if (!storedUserId && !tempSessionId) {
+      console.log('No userId or tempSessionId found in localStorage');
+      return;
+    }
+
+    try {
+      console.log('Fetching chat history with:', { storedUserId, tempSessionId, date });
+      // Ensure null values are converted to undefined
+      const data = await fetchChatHistory(
+        date,
+        storedUserId === null ? undefined : storedUserId,
+        tempSessionId === null ? undefined : tempSessionId
+      );
+
+      // If chat history exists, load it into the chat
+      if (data?.messages && data.messages.length > 0) {
+        setMessages(data.messages);
+        setShowInput(true); // Enable input for continuing the conversation
+        console.log('Loaded chat history:', data.messages);
+      } else {
+        console.log('No chat history found for userId or tempSessionId');
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('Error fetching chat history:', error);
+    }
+    return 
+  }
 
   // Handle flat journal submission
   const handleFlatJournalSubmit = async (e: React.FormEvent) => {
@@ -138,132 +165,89 @@ function JournalContent() {
 
     if (!flatJournalContent.trim() || !userId) return;
 
-    // Set user context for Sentry
-    // Sentry.setUser({ id: userId });
-
     const userMessage = { role: 'user' as const, content: flatJournalContent.trim() };
 
     // Include intro messages in the conversation
     const introMessage = { role: 'assistant' as const, content: INTRO_MESSAGE.replace("{{cuddle_name}}", getDisplayCuddleName(selectedCuddle)) };
     const promptMessage = { role: 'assistant' as const, content: getTodaysPrompt() };
 
-    try {
-      gaEvent({
-        action: 'flat_journal_submit',
-        category: 'journal',
-      });
+    gaEvent({
+      action: 'flat_journal_submit',
+      category: 'journal',
+    });
 
-      // Immediately update UI with user message and show typing indicator
-      const newMessages = [...messages, introMessage, promptMessage, userMessage];
-      setMessages(newMessages);
-      setFlatJournalContent('');
-      setShowGratitudePrompt(false);
-      setShowIntroMessage(false);
-      setIsTyping(true);
+    // Immediately update UI with user message and show typing indicator
+    const newMessages = [...messages, introMessage, promptMessage, userMessage];
+    setMessages(newMessages);
+    setFlatJournalContent('');
+    setShowGratitudePrompt(false);
+    setShowIntroMessage(false);
+    setIsTyping(true);
+    let finalMessages = [...newMessages];
 
-      // Generate AI response
-      setTimeout(async () => {
-        try {
-          const aiResponse = await generateJournalResponse(
-            getTodaysPrompt(),
-            userMessage.content,
-            getDisplayCuddleName(selectedCuddle)
-          );
+    setTimeout(async () => {
+      try {
+        // --- Generate AI response ---
+        const aiResponse = await generateJournalResponse(
+          getTodaysPrompt(),
+          userMessage.content,
+          getDisplayCuddleName(selectedCuddle)
+        );
 
-          // Split response into sentences and create two messages
-          const sentences = aiResponse.split(/(?<=[.!?])\s+/).filter(s => s.trim());
-          const firstMessage = sentences.slice(0, Math.ceil(sentences.length / 2)).join(' ');
-          const secondMessage = sentences.slice(Math.ceil(sentences.length / 2)).join(' ');
+        // Split into sentences
+        const sentences = aiResponse.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+        const firstMessage = sentences.slice(0, Math.ceil(sentences.length / 2)).join(' ');
+        const secondMessage = sentences.slice(Math.ceil(sentences.length / 2)).join(' ');
 
-          // Create final messages array upfront
-          const firstReply = { role: 'assistant' as const, content: firstMessage };
-          const secondReply = { role: 'assistant' as const, content: secondMessage };
-          const finalMessages = [...newMessages, firstReply, secondReply];
+        const firstReply = { role: 'assistant' as const, content: firstMessage };
+        const secondReply = { role: 'assistant' as const, content: secondMessage };
 
-          // UI flow: Show first message
-          const messagesWithFirst = [...newMessages, firstReply];
-          setMessages(messagesWithFirst);
+        finalMessages = [...newMessages, firstReply, secondReply];
 
-          setTimeout(() => {
-            setTimeout(() => {
-              setMessages(finalMessages);
-              setIsTyping(false);
-            }, 1500);
-          }, 2000);
-
-          // Save messages (independent of UI timing)
-          try {
-            const { error } = await saveChatMessage({
-              messages: finalMessages,
-              userId,
-              cuddleId: selectedCuddle
-            });
-
-            if (error) {
-              console.error('Error saving flat journal entry:', error);
-              setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
-              return;
-            }
-
-            // Mark as submitted and show modal
-            const today = format(new Date(), 'yyyy-MM-dd');
-            localStorage.setItem(`journal-submitted-${today}`, 'true');
-            setHasSubmittedToday(true);
-
-          } catch (saveError) {
-            console.error('Error saving flat journal entry:', saveError);
-            setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
-          }
-
-        } catch (aiError) {
-          console.error('Error generating AI response:', aiError);
-          const fallbackReply = { role: 'assistant' as const, content: "Thank you for sharing this, it means so much to me 🫶🏼. Im always here for you" };
-          const fallbackMessages = [...newMessages, fallbackReply];
-          setMessages(fallbackMessages);
+        // UI flow
+        setMessages([...newMessages, firstReply]);
+        setTimeout(() => {
+          setMessages(finalMessages);
           setIsTyping(false);
+        }, 2000);
 
-          // Save fallback message
-          try {
-            await saveChatMessage({
-              messages: fallbackMessages,
-              userId,
-              cuddleId: selectedCuddle
-            });
-            
-            const today = format(new Date(), 'yyyy-MM-dd');
-            localStorage.setItem(`journal-submitted-${today}`, 'true');
-            setHasSubmittedToday(true);
-          } catch (error) {
-            setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
-          }
+      } catch (aiError) {
+        console.error('Error generating AI response:', aiError);
+        const fallbackReply = {
+          role: 'assistant' as const,
+          content: "Thank you for sharing this, it means so much to me 🫶🏼. I'm always here for you"
+        };
+        finalMessages = [...newMessages, fallbackReply];
+        setMessages(finalMessages);
+        setIsTyping(false);
+      }
+
+      // --- Save messages (whether AI or fallback) ---
+      try {
+        const { error } = await saveChatMessage({
+          messages: finalMessages,
+          userId,
+          cuddleId: selectedCuddle,
+          mode: 'flat'
+        });
+
+        if (error) {
+          console.error('Error saving flat journal entry:', error);
+          setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
+          return;
         }
 
-      }, 1000);
+        const today = format(new Date(), 'yyyy-MM-dd');
+        localStorage.setItem(`journal-submitted-${today}`, 'true');
+        setHasSubmittedToday(true);
 
-    } catch (error) {
-      // Sentry.captureException(error, { 
-      //   extra: { 
-      //     context: 'flat_journal_submission',
-      //     userId,
-      //     cuddleId: selectedCuddle,
-      //     contentLength: flatJournalContent.length,
-      //     timestamp: new Date().toISOString(),
-      //     submissionError: error
-      //   },
-      //   tags: {
-      //     feature: 'flat_journal',
-      //     action: 'submission_error'
-      //   }
-      // });
-      console.error('Error in flat journal submission:', error);
-      setErrorMessage('Having trouble processing your journal entry. Please try again in a moment.');
-      // Reset UI state on error
-      setMessages(messages); // Revert to previous state
-      setFlatJournalContent(userMessage.content); // Restore user input
-      setShowGratitudePrompt(true);
-      setShowIntroMessage(true);
-    }
-  };
+      } catch (saveError) {
+        console.error('Error saving flat journal entry:', saveError);
+        setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
+      }
+    }, 1000);
+  }
+
 
   // Initialize user and start intro message
   useEffect(() => {
@@ -288,33 +272,18 @@ function JournalContent() {
 
         // Create new user without setting a name
         const tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const { data: user, error: createError } = await upsertUser({ tempSessionId });
+        if (createError) {
+          console.error('Error creating user:', createError);
+          return;
+        }
+        if (user) {
+          const newUserId = user.id;
 
-        try {
-          const { data: newUser, error: createError } = await supabase
-            .from(prefixedTable('users'))
-            .insert({
-              temp_session_id: tempSessionId
-            })
-            .select('id')
-            .single();
-
-          if (createError) {
-            console.error('Error creating user:', createError);
-            return;
-          }
-
-          if (newUser) {
-            const newUserId = newUser.id;
-            console.log('Created new user:', newUserId);
-            storage.setUserId(newUserId);
-            setUserId(newUserId);
-            setUserName('Username');
-
-            // Show privacy modal for new users
-            setShowPrivacyModal(true);
-          }
-        } catch (error) {
-          console.error('Error in user creation:', error);
+          setUserId(newUserId);
+          setUserName('Username');
+          // Show privacy modal for new users
+          setShowPrivacyModal(true);
         }
       } catch (error) {
         console.error('Error in initializeUser:', error);
@@ -380,13 +349,23 @@ function JournalContent() {
             // For flat journal, just show the entry in chat without welcome back message
             setIsWelcomeBack(true);
             setShowInput(true);
-            setShowSuggestedReplies(true);
+            setShowSuggestedReplies(false);
             setJournalingMode('free-form');
             console.log('Loaded flat journal entry:', data.messages);
           } else {
+            // For guided journal, show welcome back message
+            setIsWelcomeBack(true);
             setShowInput(true);
             setShowSuggestedReplies(false);
             setJournalingMode('guided');
+            console.log('Loaded previous messages:', data.messages);
+
+            // Add welcome back message and suggested replies
+            setMessages(prev => [
+              ...data.messages,
+              { role: 'assistant', content: WELCOME_BACK_MESSAGE }
+            ]);
+            setShowSuggestedReplies(true);
           }
         } else {
           if (journalMode === 'guided') {
@@ -451,30 +430,19 @@ function JournalContent() {
       if (storedUserId) {
         // Check if this is a new user (has temp_session_id)
         const checkIfNewUser = async () => {
-          try {
-            const { data } = await supabase
-              .from(prefixedTable('users'))
-              .select('temp_session_id')
-              .eq('id', storedUserId)
-              .single();
-
-            if (data?.temp_session_id) {
-              // This is a new user, start the conversation
-              const cuddle = cuddleData.cuddles[selectedCuddle];
-              setIsTyping(true);
-              setTimeout(() => {
-                setMessages([{
-                  role: 'assistant',
-                  content: cuddleIntro.replace('{cuddle-name}', cuddle.name)
-                }]);
-                setIsTyping(false);
-              }, 1500);
-            }
-          } catch (error) {
-            console.error('Error checking if new user:', error);
+          if (hasSubmittedToday) {
+            // This is a new user, start the conversation
+            const cuddle = cuddleData.cuddles[selectedCuddle];
+            setIsTyping(true);
+            setTimeout(() => {
+              setMessages([{
+                role: 'assistant',
+                content: cuddleIntro.replace('{cuddle-name}', cuddle.name)
+              }]);
+              setIsTyping(false);
+            }, 1500);
           }
         };
-
         checkIfNewUser();
       }
     }
@@ -1067,7 +1035,7 @@ function JournalContent() {
                   <div className="flex-1">
                     <div className="bg-primary/10 rounded-2xl rounded-tl-md px-6 py-4">
                       <p className="text-primary leading-relaxed font-medium">
-                        {getTodaysPrompt()}
+                       {getTodaysPrompt()}
                       </p>
                     </div>
                   </div>
@@ -1139,7 +1107,7 @@ function JournalContent() {
                               className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 flex items-center gap-2"
                             >
                               <span>Save my streak 🔥</span>
-                              
+
                             </button>
                           </div>
                         )}
@@ -1540,4 +1508,4 @@ export default function JournalPage() {
       <JournalContent />
     </Suspense>
   );
-} 
+}

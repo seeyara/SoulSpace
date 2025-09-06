@@ -1,6 +1,5 @@
 import { supabase, prefixedTable } from '@/lib/supabase';
 import { format } from 'date-fns';
-// import * as Sentry from '@sentry/nextjs';
 
 export const MESSAGES_PER_PAGE = 20;
 export const MAX_MESSAGE_HISTORY = 100;
@@ -15,6 +14,7 @@ export interface SaveChatMessageParams {
   messages: ChatMessage[];
   userId: string;
   cuddleId: string;
+  mode: 'guided' | 'flat';
 }
 
 export interface ChatHistory {
@@ -42,7 +42,7 @@ export interface UnfinishedEntry {
   };
 }
 
-export async function saveChatMessage({ messages, userId, cuddleId }: SaveChatMessageParams) {
+export async function saveChatMessage({ messages, userId, cuddleId, mode: mode }: SaveChatMessageParams) {
   const today = format(new Date(), 'yyyy-MM-dd');
 
   // Trim messages to prevent excessive storage
@@ -53,60 +53,13 @@ export async function saveChatMessage({ messages, userId, cuddleId }: SaveChatMe
     user_id: userId,
     messages: trimmedMessages,
     cuddle_id: cuddleId,
-    updated_at: new Date().toISOString()
+    updated_at: new Date().toISOString(), 
+    mode: mode
   };
-
-  // Add breadcrumb for database operation
-  // Sentry.addBreadcrumb({
-  //   message: 'Database upsert operation starting',
-  //   category: 'database',
-  //   data: {
-  //     table: prefixedTable('chats'),
-  //     userId,
-  //     cuddleId,
-  //     messageCount: trimmedMessages.length,
-  //     date: today,
-  //     payloadSize: JSON.stringify(payload).length
-  //   },
-  //   level: 'info'
-  // });
 
   const result = await supabase
     .from(prefixedTable('chats'))
     .upsert(payload);
-
-  // Log the database response
-  if (result.error) {
-    // Sentry.captureException(result.error, {
-    //   extra: {
-    //     context: 'database_upsert_error',
-    //     table: prefixedTable('chats'),
-    //     userId,
-    //     cuddleId,
-    //     date: today,
-    //     messageCount: trimmedMessages.length,
-    //     supabaseError: result.error,
-    //     payload: JSON.stringify(payload).substring(0, 1000) // Truncate for privacy
-    //   },
-    //   tags: {
-    //     database: 'supabase',
-    //     operation: 'upsert',
-    //     table: 'chats'
-    //   }
-    // });
-  } else {
-    // Log successful save
-    // Sentry.addBreadcrumb({
-    //   message: 'Database upsert successful',
-    //   category: 'database',
-    //   data: {
-    //     userId,
-    //     cuddleId,
-    //     messageCount: trimmedMessages.length
-    //   },
-    //   level: 'info'
-    // });
-  }
 
   return result;
 }
@@ -143,27 +96,50 @@ export async function fetchUnfinishedEntry(userId: string): Promise<UnfinishedEn
   }
 }
 
-export async function fetchChatHistory(userId: string, date: string): Promise<ChatHistory | null> {
-  const { data, error } = await supabase
-    .from(prefixedTable('chats'))
-    .select('messages, cuddle_id')
-    .eq('user_id', userId)
-    .eq('date', date)
-    .maybeSingle();
+export async function fetchChatHistory(
+  date: string,
+  userId?: string,
+  tempSessionId?: string
+): Promise<ChatHistory | null> {
+  console.log('Querying with userId:', userId, 'tempSessionId:', tempSessionId, 'and date:', date);
 
-  if (error) {
-    throw error;
-  }
+  try {
+    // Determine the query based on the available identifier
+    let query = supabase.from(prefixedTable('chats')).select('messages, cuddle_id').eq('date', date);
 
-  if (data) {
-    return {
-      messages: data.messages || [],
-      cuddleId: data.cuddle_id,
-      hasMore: false,
-      totalCount: Array.isArray(data.messages) ? data.messages.length : 0
-    };
+    if (userId) {
+      query = query.eq('user_id', userId);
+    } else if (tempSessionId) {
+      query = query.eq('temp_session_id', tempSessionId);
+    } else {
+      console.error('No userId or tempSessionId provided');
+      return null;
+    }
+
+    // Execute the query
+    const { data, error } = await query.maybeSingle();
+
+    // Log the results for debugging
+    console.log('Chat data:', data, 'Error:', error);
+
+    if (error) {
+      throw error;
+    }
+
+    if (data) {
+      return {
+        messages: data.messages || [],
+        cuddleId: data.cuddle_id,
+        hasMore: false,
+        totalCount: Array.isArray(data.messages) ? data.messages.length : 0,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error fetching chat history:', error);
+    return null;
   }
-  return null;
 }
 
 // New function for paginated chat history
@@ -274,8 +250,8 @@ Avoid sounding preachy, overly formal, or dramatic — aim for friendly and huma
     });
 
     if (!response.ok) {
-      console.log(response.status, response);
-      
+      console.log(response.status);
+      throw new Error(`API error: ${response.status}`);
     }
 
     const data = await response.json();

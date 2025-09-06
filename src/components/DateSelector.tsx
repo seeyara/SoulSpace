@@ -31,23 +31,20 @@ export default function DateSelector({ onDateSelect, selectedDate }: DateSelecto
         const date = addDays(newStartDate, i - 2);
         return format(date, 'yyyy-MM-dd');
       });
-
+      // TODO: Use a batch utility from journalDb.ts if/when available
       const { data: chatEntries, error } = await supabase
         .from(prefixedTable('chats'))
         .select('date')
         .in('date', dates);
-
       if (error) {
         console.error('Error fetching entries:', error);
         return;
       }
-
       const entryMap = new Set(chatEntries?.map(entry => entry.date) || []);
       const entriesWithFlags = dates.map(date => ({
         date,
         hasEntry: entryMap.has(date)
       }));
-
       setEntries(entriesWithFlags);
     } catch (error) {
       console.error('Error in updateDates:', error);

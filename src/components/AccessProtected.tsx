@@ -32,9 +32,7 @@ export function AccessProtected({
 
     // Listen for storage changes (in case user completes access in another tab)
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'soulspace_access_granted' || 
-          e.key === 'soulspace_user_email' || 
-          e.key === 'soulspace_access_token') {
+      if (e.key === 'soul_journal_user_id') {
         checkUserAccess();
       }
     };
@@ -90,9 +88,7 @@ export function useAccessControl() {
 
     // Listen for storage changes
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'soulspace_access_granted' || 
-          e.key === 'soulspace_user_email' || 
-          e.key === 'soulspace_access_token') {
+      if (e.key === 'soul_journal_user_id') {
         checkAccess();
       }
     };

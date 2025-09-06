@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import Image from 'next/image';
 import BaseModal from './BaseModal';
 import type { CuddleId } from '@/types/api';
+import { storage } from '@/lib/storage';
 
 interface CuddleSelectionModalProps {
   isOpen: boolean;
@@ -98,7 +99,8 @@ export default function CuddleSelectionModal({ isOpen, onClose, onSelectCuddle }
     }
     
     setError('');
-    setCuddleName(trimmedName); // Ensure we store the trimmed version
+    setCuddleName(trimmedName);
+    storage.setCuddleName(trimmedName); 
     setStep('meet');
   };
 
@@ -110,18 +112,18 @@ export default function CuddleSelectionModal({ isOpen, onClose, onSelectCuddle }
       const trimmedName = cuddleName.trim();
       
       // Save to localStorage first
-      localStorage.setItem('soul_journal_cuddle_id', selectedCuddle!);
-      localStorage.setItem('soul_journal_cuddle_name', trimmedName);
+      storage.setCuddleId(selectedCuddle!);
+      storage.setCuddleName(trimmedName);
       
       // Save to Supabase
-      const storedUserId = localStorage.getItem('soul_journal_user_id');
-      if (storedUserId) {
-        console.log('Saving to Supabase', storedUserId, selectedCuddle, trimmedName);
+      const storedEmail = storage.getEmail();
+      if (storedEmail) {
+        console.log('Saving to Supabase', storedEmail, selectedCuddle, trimmedName);
         const response = await fetch('/api/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            userId: storedUserId, 
+            email: storedEmail, 
             cuddleId: selectedCuddle, 
             cuddleName: trimmedName 
           }),

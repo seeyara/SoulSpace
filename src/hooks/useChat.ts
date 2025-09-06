@@ -140,7 +140,8 @@ export function useChat({
           message: options?.isFinishEntry ? "_finish_entry_" : content,
           cuddleId,
           messageHistory: messageHistoryToSend,
-          forceEnd: options?.forceEnd
+          forceEnd: options?.forceEnd, 
+          mode: 'guided'
         }, {
           headers: {
             'Content-Type': 'application/json',
@@ -223,7 +224,8 @@ export function useChat({
       await axios.post('/api/chat', {
         messages: messagesToSave,
         userId,
-        cuddleId
+        cuddleId, 
+        mode: 'guided'
       });
     } catch (error) {
       console.error('Failed to save to database:', error);

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { supabase, prefixedTable } from '@/lib/supabase';
+import { fetchUserByTempSessionId, fetchUserById } from '@/lib/utils/journalDb';
 import { format } from 'date-fns';
 import { calculateStreak, getDaysInMonth, getCuddleImage, getCuddleName } from '@/lib/utils/accountUtils';
 import { useRouter } from 'next/navigation';
@@ -31,17 +32,19 @@ export default function Account() {
 
   const fetchEntries = useCallback(async (userId: string) => {
     try {
+      // Use fetchChatHistory for each date in the month (for calendar)
+      // For optimization, you may want a batch endpoint, but for now, fetch all entries for the user
       const { data, error } = await supabase
         .from(prefixedTable('chats'))
         .select('date, cuddle_id')
         .eq('user_id', userId)
         .order('date', { ascending: true });
-
       if (error) {
         console.error('Error fetching entries:', error);
+        setEntries([]);
+        setStreak(0);
         return;
       }
-
       if (data && data.length > 0) {
         const entriesWithCuddle = data.map(entry => ({
           date: entry.date,
@@ -49,15 +52,12 @@ export default function Account() {
         }));
         setEntries(entriesWithCuddle);
         setStreak(calculateStreak(entriesWithCuddle));
-        
         // Get the last cuddle from entries
         const lastEntry = entriesWithCuddle[entriesWithCuddle.length - 1];
         if (lastEntry.cuddleId) {
           setLastCuddleFromEntries(lastEntry.cuddleId);
         }
-        
       } else {
-        // No entries yet
         setEntries([]);
         setStreak(0);
       }
@@ -78,6 +78,7 @@ export default function Account() {
       }
 
       setUserId(storedUserId);
+      console.log("User id ", userId);
       await Promise.all([
         fetchUserData(storedUserId),
         fetchEntries(storedUserId)
@@ -92,23 +93,23 @@ export default function Account() {
       try {
         const storedUserId = storage.getUserId();
         if (!storedUserId) return;
-        
+
         // Try Supabase first
         const { data, error } = await supabase
           .from(prefixedTable('users'))
           .select('cuddle_id, cuddle_name')
           .eq('id', storedUserId)
           .single();
-        
+
         if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" error
           console.error('Error fetching cuddle from Supabase:', error);
         }
-        
+
         if (data && (data.cuddle_id || data.cuddle_name)) {
           // Found data in Supabase
           if (data.cuddle_id) setSelectedCuddle(data.cuddle_id);
           if (data.cuddle_name) setCuddleName(data.cuddle_name);
-          
+
           // Update localStorage to keep it in sync
           storage.setCuddleId(data.cuddle_id || '');
           storage.setCuddleName(data.cuddle_name || '');
@@ -116,7 +117,7 @@ export default function Account() {
           // No data in Supabase, fallback to localStorage
           const localCuddleId = storage.getCuddleId();
           const localCuddleName = storage.getCuddleName();
-          
+
           if (localCuddleId) setSelectedCuddle(localCuddleId);
           if (localCuddleName) setCuddleName(localCuddleName);
         }
@@ -166,18 +167,12 @@ export default function Account() {
 
   const fetchUserData = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from(prefixedTable('users'))
-        .select('name')
-        .eq('id', userId)
-        .single();
-
+      const { data, error } = await fetchUserById(userId);
       if (error) {
         console.error('Error fetching user data:', error);
         setUserName('Username');
         return;
       }
-
       if (data?.name) {
         setUserName(data.name);
       } else {
@@ -191,13 +186,29 @@ export default function Account() {
 
   const fetchChatHistory = async (date: string) => {
     try {
-      const response = await fetch(`/api/chat?userId=${userId}&date=${date}`);
-      const { data } = await response.json();
-      
-      if (data?.messages) {
-        setChatMessages(data.messages);
-        if (data.cuddleId) {
-          setSelectedCuddle(data.cuddleId);
+      // Get stored user ID
+      const storedUserId = storage.getUserId();
+      if (!storedUserId) {
+        // If no user ID, prompt them to start journaling first
+        return; // Don't open modal, they need to start journaling first
+      }
+      const { data: chatData, error } = await supabase
+        .from(prefixedTable('chats'))
+        .select('*')
+        .eq('date', date)
+        .eq('user_id', storedUserId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching chat history:', error);
+        setChatMessages([]);
+        return;
+      }
+
+      if (chatData?.messages) {
+        setChatMessages(chatData.messages);
+        if (chatData.cuddleId) {
+          setSelectedCuddle(chatData.cuddleId);
         }
         setIsModalOpen(true);
       } else {
@@ -234,7 +245,7 @@ export default function Account() {
     setSelectedCuddle(cuddleId);
     setCuddleName(cuddleName);
     setIsCuddleModalOpen(false);
-    
+
     // Navigate to journaling with the selected cuddle
     router.push(`/journal?cuddle=${cuddleId}`);
   };
@@ -257,7 +268,7 @@ export default function Account() {
       </header>
 
       {/* Profile Section */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="max-w-xl mx-auto px-4 pt-20"
@@ -291,7 +302,7 @@ export default function Account() {
                 </button>
               </div>
             ) : (
-              <div 
+              <div
                 className="flex items-center space-x-2 cursor-pointer"
                 onClick={() => setIsEditingName(true)}
               >
@@ -312,7 +323,7 @@ export default function Account() {
           className="mb-8 text-center"
         >
           <p className="text-lg text-primary/80 italic">
-           Eighty percent of success is showing up.
+            Eighty percent of success is showing up.
           </p>
           <p className="text-sm text-primary/60 mt-2">
             - Woody Allen
@@ -321,7 +332,7 @@ export default function Account() {
 
         {/* Stats and Cuddle Companion */}
         <div className="grid grid-cols-2 gap-4 pb-4">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
@@ -331,7 +342,7 @@ export default function Account() {
             <p className="text-2xl font-semibold text-primary">{streak} days</p>
           </motion.div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
@@ -342,7 +353,7 @@ export default function Account() {
               // 1. If user has selected a cuddle and set a name (in DB), show that
               // 2. If not, show last cuddle from journal entries (if entries > 0)
               // 3. Else show "Pick a cuddle" button
-              
+
               if (selectedCuddle && cuddleName) {
                 // User has selected a cuddle and set a name
                 return (
@@ -429,7 +440,7 @@ export default function Account() {
         </div>
 
         {/* Calendar */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
@@ -460,9 +471,8 @@ export default function Account() {
                 <div
                   key={dateStr}
                   onClick={() => handleDateClick(date)}
-                  className={`aspect-square rounded-xl flex items-center justify-center cursor-pointer transition-all shadow-sm hover:shadow-md ${
-                    hasEntry ? 'bg-primary text-white hover:bg-primary/90' : 'hover:bg-primary/5'
-                  }`}
+                  className={`aspect-square rounded-xl flex items-center justify-center cursor-pointer transition-all shadow-sm hover:shadow-md ${hasEntry ? 'bg-primary text-white hover:bg-primary/90' : 'hover:bg-primary/5'
+                    }`}
                 >
                   <div className="relative">
                     <span className="text-sm">{format(date, 'd')}</span>

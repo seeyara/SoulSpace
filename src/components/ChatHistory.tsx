@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { prefixedTable, supabase } from '@/lib/supabase';
+import { fetchChatHistory } from '@/lib/utils/journalDb';
 
 interface Message {
   type: 'cuddle' | 'user';
@@ -23,19 +23,22 @@ export default function ChatHistory({ date, selectedCuddle, onStartJournaling }:
   useEffect(() => {
     const fetchChat = async () => {
       try {
-        const { data: chat, error } = await supabase
-          .from(prefixedTable('chats'))
-          .select('messages')
-          .eq('date', date)
-          .single();
-
-        if (error) {
-          console.error('Error fetching chat:', error);
+        // Assume userId is available via localStorage or context
+        const storedUserId = typeof window !== 'undefined' ? localStorage.getItem('soul_journal_user_id') : null;
+        if (!storedUserId) {
+          setLoading(false);
           return;
         }
-
-        if (chat) {
-          setMessages(chat.messages);
+        const { data, error } = await fetchChatHistory(storedUserId, date);
+        if (error) {
+          console.error('Error fetching chat:', error);
+          setLoading(false);
+          return;
+        }
+        if (data && data.length > 0 && data[0].messages) {
+          setMessages(data[0].messages);
+        } else {
+          setMessages([]);
         }
       } catch (error) {
         console.error('Error in fetchChat:', error);
@@ -43,7 +46,6 @@ export default function ChatHistory({ date, selectedCuddle, onStartJournaling }:
         setLoading(false);
       }
     };
-
     if (date) {
       fetchChat();
     }
@@ -54,7 +56,7 @@ export default function ChatHistory({ date, selectedCuddle, onStartJournaling }:
   };
 
   const getCuddleImage = (id: string) => {
-    switch(id) {
+    switch (id) {
       case 'olly-sr':
         return '/assets/Olly Sr.png';
       case 'olly-jr':
@@ -112,11 +114,10 @@ export default function ChatHistory({ date, selectedCuddle, onStartJournaling }:
             )}
             <div className="flex flex-col">
               <div
-                className={`p-4 rounded-2xl ${
-                  message.type === 'user'
+                className={`p-4 rounded-2xl ${message.type === 'user'
                     ? 'bg-primary text-white'
                     : 'bg-white text-gray-800'
-                }`}
+                  }`}
               >
                 {message.content}
               </div>

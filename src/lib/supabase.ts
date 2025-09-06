@@ -11,8 +11,11 @@ if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Get environment prefix for table names
-export const SUPABASE_ENV_PREFIX = process.env.NEXT_PUBLIC_SUPABASE_ENV_PREFIX || '';
+// Get environment prefix for table names (server vs client)
+export const SUPABASE_ENV_PREFIX =
+  typeof window === 'undefined'
+    ? process.env.SUPABASE_ENV_PREFIX || ''
+    : process.env.NEXT_PUBLIC_SUPABASE_ENV_PREFIX || '';
 
 // Helper to prefix table names
 export function prefixedTable(table: string) {

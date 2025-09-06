@@ -3,7 +3,8 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
-import { supabase, prefixedTable } from '@/lib/supabase';
+import { prefixedTable } from '@/lib/supabase';
+import { upsertUser } from '@/lib/utils/journalDb';
 
 interface CommunityAccessModalProps {
   isOpen: boolean;
@@ -28,23 +29,14 @@ export default function CommunityAccessModal({ isOpen, onClose, userId }: Commun
     setError(null);
 
     try {
-      // Update the user with email only
-      const { error: updateError } = await supabase
-        .from(prefixedTable('users'))
-        .update({ email })
-        .eq('id', userId);
-
+      const { error: updateError } = await upsertUser({ userId: userId, email });
       if (updateError) {
         throw updateError;
       }
-
-      // Store email status locally
       localStorage.setItem('soul_community_invite_pending', 'true');
-      
       setIsSignedUp(true);
-      // Wait a moment before closing
       setTimeout(() => {
-        window.location.reload(); // Reload to update pending state
+        window.location.reload();
       }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign up');

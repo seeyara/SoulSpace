@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase, prefixedTable } from '@/lib/supabase';
+import { upsertUser } from '@/lib/utils/journalDb';
 
 export async function POST(request: Request) {
   try {
@@ -18,36 +18,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid user ID format' }, { status: 400 });
     }
 
-    // Prepare update data
-    const updateData: Record<string, unknown> = {
-      id: cleanUserId,
-    };
-
-    if (name !== undefined) {
-      updateData.name = name || 'Username';
-    }
-
-    if (cuddleId !== undefined) {
-      updateData.cuddle_id = cuddleId;
-    }
-
-    if (cuddleName !== undefined) {
-      updateData.cuddle_name = cuddleName;
-    }
-
-    // Create or update user
-    const { data, error } = await supabase
-      .from(prefixedTable('users'))
-      .upsert(updateData)
-      .select()
-      .single();
-
+    // Use upsertUser utility
+    const { data: newUserId, error } = await upsertUser({
+      userId: cleanUserId, // Pass cleaned userId here
+      name: name,
+      cuddleId: cuddleId,
+      cuddleName: cuddleName
+    });
     if (error) {
       console.error('Supabase error:', error);
       throw error;
     }
-
-    return NextResponse.json(data);
+    return NextResponse.json(newUserId);
   } catch (error) {
     console.error('Error creating/updating user:', error);
     return NextResponse.json(

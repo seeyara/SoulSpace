@@ -10,6 +10,7 @@ export async function fetchUserChatDates(userId: string, dates: string[]) {
 import { supabase, prefixedTable } from '@/lib/supabase';
 import { format } from 'date-fns';
 import type { CuddleId } from '@/types/api';
+import { storage } from '../storage';
 
 export async function upsertFlatJournalEntry({ userId, cuddleId, content }: { userId: string, cuddleId: CuddleId, content: string }) {
   const { error } = await supabase
@@ -17,31 +18,27 @@ export async function upsertFlatJournalEntry({ userId, cuddleId, content }: { us
     .insert({
       user_id: userId,
       cuddle_id: cuddleId,
-      messages: [{ role: 'user' as const, content: content.trim() }],
+      messages: [{ role: 'user', content: content.trim() }],
       date: format(new Date(), 'yyyy-MM-dd'),
       mode: 'flat',
     });
   return { error };
 }
 
-export async function upsertGuidedJournalEntry({ userId, cuddleId, messages }: { 
-  userId: string, 
-  cuddleId: CuddleId, 
-  messages: Array<{ role: 'user' | 'assistant', content: string }> 
-}) {
+export async function upsertGuidedJournalEntry({ userId, cuddleId, content }: { userId: string, cuddleId: CuddleId, content: string }) {
   const { error } = await supabase
     .from(prefixedTable('chats'))
     .insert({
       user_id: userId,
       cuddle_id: cuddleId,
-      messages: messages,
+      messages: [{ role: 'user', content: content.trim() }],
       date: format(new Date(), 'yyyy-MM-dd'),
       mode: 'guided',
     });
   return { error };
 }
 
-export async function fetchChatHistory({ userId, date }: { userId: string, date: string }) {
+export async function fetchChatHistory(userId: string, date: string) {
   // You can adjust the query as needed for pagination, etc.
   const { data, error } = await supabase
     .from(prefixedTable('chats'))
@@ -52,11 +49,21 @@ export async function fetchChatHistory({ userId, date }: { userId: string, date:
   return { data, error };
 }
 
-// USERS TABLE HELPERS
+export async function fetchChatHistoryWithTempSessionId(tempSessionId: string, date: string) {
+  // You can adjust the query as needed for pagination, etc.
+  const { data, error } = await supabase
+    .from(prefixedTable('chats'))
+    .select('*')
+    .eq('temp_session_id', tempSessionId)
+    .eq('date', date)
+    .order('created_at', { ascending: true });
+  return { data, error };
+}
 
-export async function upsertUser({ id, email, name, tempSessionId, cuddleId, cuddleName }: {
-  id?: string;
-  email: string; // Make email required since database requires it
+// USERS TABLE HELPERS
+export async function upsertUser({ userId, email, name, tempSessionId, cuddleId, cuddleName }: {
+  email?: string;
+  userId?: string;
   name?: string;
   tempSessionId?: string;
   cuddleId?: string;
@@ -64,56 +71,58 @@ export async function upsertUser({ id, email, name, tempSessionId, cuddleId, cud
 }) {
   let isExistingUser = false;
   
-  // Check if user already exists by email (since email is unique)
-  const { data: existingUser } = await supabase
-    .from(prefixedTable('users'))
-    .select('*')
-    .eq('email', email)
-    .single();
-  
-  if (existingUser) {
-    isExistingUser = true;
+  // If email is provided, check if user already exists
+  if (email) {
+    const { data: existingUser } = await supabase
+      .from(prefixedTable('users'))
+      .select('*')
+      .eq('email', email)
+      .single();
     
-    // If updating existing user, only update non-null fields
-    const updateData: Record<string, string> = {};
-    if (name) updateData.name = name;
-    if (tempSessionId) updateData.temp_session_id = tempSessionId;
-    if (cuddleId) updateData.cuddle_id = cuddleId;
-    if (cuddleName) updateData.cuddle_name = cuddleName;
-    
-    // Only update if there are fields to update
-    if (Object.keys(updateData).length > 0) {
-      const { data: updatedUser, error: updateError } = await supabase
-        .from(prefixedTable('users'))
-        .update(updateData)
-        .eq('id', existingUser.id)
-        .select()
-        .single();
-      
-      return { data: updatedUser || existingUser, error: updateError, isExistingUser };
+    if (existingUser) {
+      console.log("Existing user found with email:", email);
+      storage.setUserId(existingUser.id);
+      isExistingUser = true;
+      // Return existing user without creating new record
+      return { data: existingUser, error: null, isExistingUser };
     }
+  }
+
+   // If tempSessionId is provided, check if user already exists
+  if (tempSessionId) {
+    const { data: existingUser } = await supabase
+      .from(prefixedTable('users'))
+      .select('*')
+      .eq('temp_session_id', tempSessionId)
+      .single();
     
-    // Return existing user without updates
-    return { data: existingUser, error: null, isExistingUser };
+    if (existingUser) {
+      console.log("Existing user found with tempSessionId:", tempSessionId);
+      storage.setUserId(existingUser.id);
+      isExistingUser = true;
+      // Return existing user without creating new record
+      return { data: existingUser, error: null, isExistingUser };
+    }
   }
   
-  // Create new user - email is required
-  const insertData: Record<string, string> = {
-    email: email, // Required field
-    name: name || 'Username', // Provide default name if not specified
-  };
-  
-  if (id) insertData.id = id;
-  if (tempSessionId) insertData.temp_session_id = tempSessionId;
-  if (cuddleId) insertData.cuddle_id = cuddleId;
-  if (cuddleName) insertData.cuddle_name = cuddleName;
+  console.log("No existing user found. Creating new user.");
+  const upsertData: Record<string, any> = {};
+  if (email) upsertData.email = email;
+  if (userId) upsertData.id = userId;
+  if (name) upsertData.name = name;
+  if (tempSessionId) upsertData.temp_session_id = tempSessionId;
+  if (cuddleId) upsertData.cuddle_id = cuddleId;
+  if (cuddleName) upsertData.cuddle_name = cuddleName;
   
   const { data, error } = await supabase
     .from(prefixedTable('users'))
-    .insert(insertData)
+    .upsert([upsertData])
     .select()
     .single();
-    
+  console.log('Created new user:', data.id);
+  if (data) {
+    storage.setUserId(data.id);
+  }
   return { data, error, isExistingUser };
 }
 
@@ -122,6 +131,15 @@ export async function fetchUserById(id: string) {
     .from(prefixedTable('users'))
     .select('*')
     .eq('id', id)
+    .single();
+  return { data, error };
+}
+
+export async function fetchUserByTempSessionId(id: string) {
+  const { data, error } = await supabase
+    .from(prefixedTable('users'))
+    .select('*')
+    .eq('temp_session_id', id)
     .single();
   return { data, error };
 }

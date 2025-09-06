@@ -2,8 +2,10 @@
 
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { supabase, prefixedTable } from '@/lib/supabase';
+import { fetchUserChatDates } from '@/lib/utils/journalDb';
+import { upsertUser } from '@/lib/utils/journalDb';
 import { format, subDays } from 'date-fns';
+import { storage } from '@/lib/storage';
 
 interface StreakModalProps {
   isOpen: boolean;
@@ -36,21 +38,14 @@ export default function StreakModal({ isOpen, onClose, userId }: StreakModalProp
     // Fetch entries for these dates
     const fetchEntries = async () => {
       if (!userId) return;
-
       try {
-        const { data, error } = await supabase
-          .from(prefixedTable('chats'))
-          .select('date')
-          .eq('user_id', userId)
-          .in('date', datesArray.map(d => d.date));
-
+        const { data, error } = await fetchUserChatDates(userId, datesArray.map(d => d.date));
         if (error) {
           console.error('Error fetching entries:', error);
           return;
         }
-
         if (data) {
-          const entryDates = new Set(data.map(entry => entry.date));
+          const entryDates = new Set(data.map((entry: { date: string }) => entry.date));
           setDates(datesArray.map(d => ({
             ...d,
             hasEntry: entryDates.has(d.date)
@@ -60,7 +55,6 @@ export default function StreakModal({ isOpen, onClose, userId }: StreakModalProp
         console.error('Error fetching entries:', error);
       }
     };
-
     fetchEntries();
   }, [userId]);
 
@@ -70,23 +64,18 @@ export default function StreakModal({ isOpen, onClose, userId }: StreakModalProp
       setError('User ID is missing');
       return;
     }
-
+    storage.setEmail(email);
     setIsLoading(true);
     setError(null);
 
+    const tempSessionId = storage.getSessionId() || undefined;
+    
     try {
-      // Update the user with email
-      const { error: updateError } = await supabase
-        .from(prefixedTable('users'))
-        .update({ email })
-        .eq('id', userId);
-
+      const { error: updateError } = await upsertUser({ tempSessionId: tempSessionId, email });
       if (updateError) {
         throw updateError;
       }
-
       setIsSignedUp(true);
-      // Wait a moment before closing
       setTimeout(() => {
         onClose();
       }, 2000);
@@ -228,7 +217,7 @@ export default function StreakModal({ isOpen, onClose, userId }: StreakModalProp
               transition={{ delay: 0.6 }}
             >
               <p className="text-gray-600 mb-6">
-                Want to save your streak so you never miss your next chat with Cuddle™?</p>
+                Want a little nudge so you never miss your next chat with Cuddle™?</p>
               
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div>

@@ -140,7 +140,7 @@ export const POST = withRedisRateLimit({
     }
 
     const aiResponse = completion.choices[0]?.message?.content || 'Thank you for sharing this, it means so much to me 🫶🏼. Im always here for you';
-
+    
     // Log OpenAI response details
     console.log('=== OPENAI API RESPONSE ===');
     console.log('Raw Response:', aiResponse);

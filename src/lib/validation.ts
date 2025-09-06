@@ -29,7 +29,10 @@ export const SaveChatRequestSchema = z.object({
   userId: z.string().uuid('Invalid user ID format'),
   cuddleId: z.enum(['ellie-sr', 'olly-sr', 'ellie-jr', 'olly-jr'], {
     errorMap: () => ({ message: 'Invalid cuddle ID' })
-  })
+  }), 
+  mode: z.enum(['guided', 'flat'], {
+    errorMap: () => ({ message: 'Invalid mode' })
+  }).default('flat')
 });
 
 // Get chat request schema (query params)

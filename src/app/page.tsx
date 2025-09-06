@@ -10,7 +10,6 @@ import DateSelector from '@/components/DateSelector';
 import ChatHistoryModal from '@/components/ChatHistoryModal';
 import { Sparkles } from 'lucide-react';
 
-
 const cuddleAttributes = {
   'olly-sr': {
     name: "Olly Sr.",
@@ -96,45 +95,6 @@ export default function Home() {
       setUserId(storedUserId);
     }
   }, []);
-
-  useEffect(() => {
-    const fetchCuddle = async () => {
-      try {
-        const storedUserId = storage.getUserId();
-        if (!storedUserId) return;
-        
-        const { data, error } = await supabase
-          .from(prefixedTable('users'))
-          .select('cuddle_id, cuddle_name')
-          .eq('id', storedUserId)
-          .single();
-        
-        if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" error
-          console.error('Error fetching cuddle from Supabase:', error);
-        }
-        
-        if (data && (data.cuddle_id || data.cuddle_name)) {
-          // Found data in Supabase
-          if (data.cuddle_id) setSelectedCuddle(data.cuddle_id);
-          
-          // Update storage to keep it in sync
-          storage.setCuddleId(data.cuddle_id || '');
-          storage.setCuddleName(data.cuddle_name || '');
-        } else {
-          // No data in Supabase, fallback to storage
-          const localCuddleId = storage.getCuddleId();
-          
-          if (localCuddleId) setSelectedCuddle(localCuddleId);
-        }
-      } catch (error) {
-        console.error('Error in fetchCuddle:', error);
-        // Fallback to storage on any error
-        const localCuddleId = storage.getCuddleId();
-        if (localCuddleId) setSelectedCuddle(localCuddleId);
-      }
-    };
-    fetchCuddle();
-  }, [userId]);
 
   const handleDateSelect = async (date: string) => {
     setSelectedDate(date);
