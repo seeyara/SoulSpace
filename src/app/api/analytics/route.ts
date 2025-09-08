@@ -3,7 +3,7 @@ import { supabase, prefixedTable } from '@/lib/supabase';
 
 export async function GET() {
   try {
-    console.log("Table " +prefixedTable('chats'));
+    console.log("Table " + prefixedTable('chats'));
     // Get all chat data joined with user emails
     const { data: allChats, error: chatsError } = await supabase
       .from(prefixedTable('chats'))
@@ -128,7 +128,7 @@ function calculateCohortRetention(chats: any[]) {
 
 function calculateStreakLeaderboard(chats: any[]) {
   const userDates = new Map<string, Set<string>>();
- 
+
   // Group dates by user
   chats.forEach(chat => {
     if (!userDates.has(chat.user_id)) {
@@ -187,8 +187,8 @@ function calculatePromptEngagement(chats: any[]) {
   const cuddleNames: { [key: string]: string } = {
     'ellie-jr': 'Ellie Jr.',
     'ellie-sr': 'Ellie Sr.',
-    'olly-jr' : 'Olly Jr.',
-    'olly-sr' : 'Olly Sr.',
+    'olly-jr': 'Olly Jr.',
+    'olly-sr': 'Olly Sr.',
   };
 
   return Array.from(cuddleEngagement.entries())

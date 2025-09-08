@@ -6,7 +6,7 @@ interface AnalyticsData {
   dailyActiveJournalers: Array<{ date: string; activeUsers: number }>;
   totalUniqueUsers: number;
   cohortRetention: Array<{ week: string; activeUsers: number; retentionRate: number }>;
-  streakLeaderboard: Array<{ userId: string; streak: number; totalEntries: number }>;
+  streakLeaderboard: Array<{ userId: string; email: string; streak: number; totalEntries: number }>;
   promptEngagement: Array<{ prompt: string; count: number }>;
 }
 
