@@ -128,7 +128,7 @@ function calculateCohortRetention(chats: any[]) {
 
 function calculateStreakLeaderboard(chats: any[]) {
   const userDates = new Map<string, Set<string>>();
-
+ 
   // Group dates by user
   chats.forEach(chat => {
     if (!userDates.has(chat.user_id)) {
@@ -137,7 +137,7 @@ function calculateStreakLeaderboard(chats: any[]) {
     userDates.get(chat.user_id)!.add(chat.date);
   });
 
-  const userStreaks: Array<{userId: string, streak: number, totalEntries: number}> = [];
+  const userStreaks: Array<{ email: string; streak: number; totalEntries: number }> = [];
 
   userDates.forEach((dates, userId) => {
     const sortedDates = Array.from(dates).sort();
@@ -162,10 +162,11 @@ function calculateStreakLeaderboard(chats: any[]) {
       maxStreak = Math.max(maxStreak, currentStreak);
     }
 
+    const email = chats.find(chat => chat.user_id === userId)?.users?.email || 'Unknown';
     userStreaks.push({
-      userId: userId.substring(0, 8) + '...', // Anonymize for privacy
+      email: email,
       streak: maxStreak,
-      totalEntries: dates.size
+      totalEntries: dates.size,
     });
   });
 
