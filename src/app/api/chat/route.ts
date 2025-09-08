@@ -3,22 +3,25 @@ import { saveChatMessage, fetchUnfinishedEntry, fetchChatHistory } from '@/lib/u
 import { withErrorHandler } from '@/lib/errors';
 import { withRateLimit } from '@/lib/rateLimiter';
 import { SaveChatRequestSchema, GetChatRequestSchema, validateRequestBody, validateQueryParams } from '@/lib/validation';
+import * as Sentry from "@sentry/nextjs";
 
 // Save chat messages
 export const POST = withRateLimit('chat', withErrorHandler(async (request: Request) => {
   let body;
   try {
     body = await request.json();
-  } catch (err) {
-    console.error('Invalid JSON in request body:', err);
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Invalid JSON in request body:', error);
     return NextResponse.json({ success: false, error: 'Invalid JSON in request body' }, { status: 400 });
   }
   let validatedData;
   try {
     validatedData = validateRequestBody(SaveChatRequestSchema)(body);
-  } catch (err) {
-    console.error('Validation error:', err);
-    return NextResponse.json({ success: false, error: err instanceof Error ? err.message : String(err) }, { status: 400 });
+  } catch (error) {
+    Sentry.captureException(error);
+    console.error('Validation error:', error);
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : String(error) }, { status: 400 });
   }
   const { messages, userId, cuddleId } = validatedData;
 
@@ -31,6 +34,7 @@ export const POST = withRateLimit('chat', withErrorHandler(async (request: Reque
 
   if (error) {
     console.error('Supabase error:', error);
+    Sentry.captureException(error);
     return NextResponse.json({ success: false, error: error.message || String(error) }, { status: 500 });
   }
 

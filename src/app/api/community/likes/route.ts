@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import * as Sentry from "@sentry/nextjs";
 
 export async function POST(request: Request) {
   try {
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Error toggling like:', error);
+    Sentry.captureException(error);
     return NextResponse.json({ error: 'Failed to toggle like' }, { status: 500 });
   }
 } 

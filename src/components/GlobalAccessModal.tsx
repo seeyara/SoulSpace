@@ -5,6 +5,7 @@ import { LockClosedIcon } from '@heroicons/react/24/outline';
 import BaseModal from '@/components/BaseModal';
 import { upsertUser } from '@/lib/utils/journalDb';
 import { storage } from '@/lib/storage';
+import * as Sentry from "@sentry/nextjs";
 
 export default function GlobalAccessModal() {
   // ...existing code...
@@ -43,6 +44,7 @@ export default function GlobalAccessModal() {
       const { data: newUser, error: createError, isExistingUser } = await upsertUser({ tempSessionId, email, name });
       setIsLoading(false);
       if (createError) {
+        Sentry.captureException(createError);
         console.error('Error creating user in GlobalAccessModal:', createError);
         setError('We couldn’t create your account. This may be a network issue or a problem with your email.');
         // Optionally, provide more context or actions
@@ -59,6 +61,7 @@ export default function GlobalAccessModal() {
         }
       }
     } catch (err) {
+      Sentry.captureException(err);
       setIsLoading(false);
       console.error('Unexpected error in handleEmailSubmit:', err);
       setError('Unexpected error. Please try again.');

@@ -17,6 +17,7 @@ import { upsertUser } from '@/lib/utils/journalDb';
 import { storage } from '@/lib/storage';
 import { cuddlePrompts } from '@/data/cuddles';
 import { fetchChatHistory, saveChatMessage, generateJournalResponse } from '@/lib/utils/chatUtils';
+import * as Sentry from "@sentry/nextjs";
 
 // Import mode toggle components
 import { JournalModeRadioToggle } from '@/components/JournalModeToggle';
@@ -155,6 +156,7 @@ function JournalContent() {
         setMessages([]);
       }
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error fetching chat history:', error);
     }
     return
@@ -286,6 +288,7 @@ function JournalContent() {
           setShowPrivacyModal(true);
         }
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error in initializeUser:', error);
       }
     };
@@ -396,6 +399,7 @@ function JournalContent() {
           }
         }
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error fetching chat history:', error);
         // Fallback to new user flow
         const cuddle = cuddleData.cuddles[selectedCuddle];
@@ -527,6 +531,7 @@ function JournalContent() {
           },
         })
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error:', error);
       }
 
@@ -574,6 +579,7 @@ function JournalContent() {
       }
       setShowInput(true);
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error in handleSubmit:', error);
       // Batch error state updates
       setIsTyping(false);
@@ -639,6 +645,7 @@ function JournalContent() {
       }, 1000);
 
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error saving journal entry:', error);
       // Batch error state updates
       setMessages(prev => [...prev, {
@@ -748,9 +755,11 @@ function JournalContent() {
         });
 
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error saving chat:', error);
       }
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error in handleFinishEntry:', error);
       setIsTyping(false);
     }
@@ -845,6 +854,7 @@ function JournalContent() {
             setHasMoreMessages(false);
           }
         } catch (error) {
+          Sentry.captureException(error);
           console.error('Error loading more messages:', error);
         } finally {
           setIsLoadingMore(false);

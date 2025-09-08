@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase, prefixedTable } from '@/lib/supabase';
+import * as Sentry from "@sentry/nextjs";
 
 export async function GET() {
   try {
@@ -51,6 +52,7 @@ export async function GET() {
     });
 
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Analytics API error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch analytics data' },

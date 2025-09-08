@@ -6,6 +6,7 @@ import { fetchUserChatDates } from '@/lib/utils/journalDb';
 import { upsertUser } from '@/lib/utils/journalDb';
 import { format, subDays } from 'date-fns';
 import { storage } from '@/lib/storage';
+import * as Sentry from "@sentry/nextjs";
 
 interface StreakModalProps {
   isOpen: boolean;
@@ -52,6 +53,7 @@ export default function StreakModal({ isOpen, onClose, userId }: StreakModalProp
           })));
         }
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error fetching entries:', error);
       }
     };

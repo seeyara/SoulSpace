@@ -6,6 +6,7 @@ const PRIVACY_MODAL_ENABLED = process.env.NEXT_PUBLIC_PRIVACY_MODAL_ENABLED === 
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import BaseModal from './BaseModal';
+import * as Sentry from "@sentry/nextjs";
 
 interface PrivacyModalProps {
   isOpen: boolean;
@@ -76,6 +77,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
       }
       setTimeout(() => { onClose(); }, 1000);
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error saving profile:', error);
     } finally {
       setIsSubmitting(false);

@@ -1,5 +1,6 @@
 import { supabase, prefixedTable } from '@/lib/supabase';
 import { format } from 'date-fns';
+import * as Sentry from "@sentry/nextjs";
 
 export const MESSAGES_PER_PAGE = 20;
 export const MAX_MESSAGE_HISTORY = 100;
@@ -76,6 +77,7 @@ export async function fetchUnfinishedEntry(userId: string): Promise<UnfinishedEn
       .maybeSingle(); // Use maybeSingle instead of single to avoid errors
 
     if (error) {
+      Sentry.captureException(error);
       throw error;
     }
 
@@ -92,6 +94,7 @@ export async function fetchUnfinishedEntry(userId: string): Promise<UnfinishedEn
     }
     return null;
   } catch (error) {
+    Sentry.captureException(error);
     throw error;
   }
 }
@@ -137,6 +140,7 @@ export async function fetchChatHistory(
 
     return null;
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Error fetching chat history:', error);
     return null;
   }
@@ -199,6 +203,7 @@ export async function fetchUserChatStats(userId: string): Promise<{
     .limit(30); // Last 30 days for recent activity
 
   if (error) {
+    Sentry.captureException(error);
     throw error;
   }
 
@@ -265,6 +270,7 @@ Avoid sounding preachy, overly formal, or dramatic — aim for friendly and huma
     return aiMessage;
 
   } catch (error) {
+    Sentry.captureException(error);
     console.error('Failed to generate journal response:', error);
     return fallbackMessage;
   }

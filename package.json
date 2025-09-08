@@ -21,7 +21,7 @@
     "@heroicons/react": "^2.2.0",
     "@radix-ui/react-avatar": "^1.1.10",
     "@sentry/cli": "^2.50.2",
-    "@sentry/nextjs": "^10.0.0",
+    "@sentry/nextjs": "^10.10.0",
     "@supabase/supabase-js": "^2.49.8",
     "@types/node": "^20",
     "@types/react": "^19",

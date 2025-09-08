@@ -5,6 +5,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import axios, { AxiosError } from 'axios';
 import { storage } from '@/lib/storage';
 import type { CuddleId } from '@/types/api';
+import * as Sentry from "@sentry/nextjs";
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -182,6 +183,7 @@ export function useChat({
         return { success: true, shouldEnd };
 
       } catch (error) {
+        Sentry.captureException(error);
         console.error(`Send attempt ${attempt} failed:`, error);
 
         // Handle different error types
@@ -228,6 +230,7 @@ export function useChat({
         mode: 'guided'
       });
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Failed to save to database:', error);
       // Don't throw - this is background save
     }
@@ -285,6 +288,7 @@ export function useChat({
         setState(prev => ({ ...prev, isLoading: false }));
       }
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Failed to load messages:', error);
       setState(prev => ({ 
         ...prev, 

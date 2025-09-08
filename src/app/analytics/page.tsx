@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import * as Sentry from "@sentry/nextjs";
 
 interface AnalyticsData {
   dailyActiveJournalers: Array<{ date: string; activeUsers: number }>;
@@ -26,6 +27,7 @@ export default function AnalyticsPage() {
       const analyticsData = await response.json();
       setData(analyticsData);
     } catch (err) {
+      Sentry.captureException(error);
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);

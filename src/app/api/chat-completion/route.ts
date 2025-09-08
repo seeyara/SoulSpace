@@ -6,6 +6,7 @@ import { buildWhisprPrompt } from '@/lib/utils/buildWhisprPrompt';
 import { withRedisRateLimit } from '@/lib/withRedisRateLimit';
 import { withErrorHandler } from '@/lib/errors';
 import { ChatCompletionRequestSchema, validateRequestBody, type ChatMessage } from '@/lib/validation';
+import * as Sentry from "@sentry/nextjs";
 
 const openai = new OpenAI({
   apiKey: serverConfig.openai.apiKey,
@@ -23,7 +24,9 @@ export const POST = withRedisRateLimit({
         const parsed = typeof body === 'string' ? JSON.parse(body) : body;
         if (parsed && parsed.userId) return parsed.userId;
       }
-    } catch {}
+    } catch {
+
+    }
     return req.headers.get('x-user-id') || 'anonymous';
   },
 })(withErrorHandler(async (request: Request) => {
@@ -136,6 +139,7 @@ export const POST = withRedisRateLimit({
     } catch (error) {
       console.error('=== OPENAI API ERROR ===');
       console.error('Error Type:', error);
+      Sentry.captureException(error);
       throw error;
     }
 

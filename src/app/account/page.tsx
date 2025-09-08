@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { supabase, prefixedTable } from '@/lib/supabase';
-import { fetchUserByTempSessionId, fetchUserById } from '@/lib/utils/journalDb';
+import { fetchUserById } from '@/lib/utils/journalDb';
 import { format } from 'date-fns';
 import { calculateStreak, getDaysInMonth, getCuddleImage, getCuddleName } from '@/lib/utils/accountUtils';
 import { useRouter } from 'next/navigation';
@@ -13,6 +13,7 @@ import CuddleSelectionModal from '@/components/CuddleSelectionModal';
 import type { CuddleId } from '@/types/api';
 import { event as gaEvent } from '@/lib/utils/gtag';
 import { storage } from '@/lib/storage';
+import * as Sentry from "@sentry/nextjs";
 
 export default function Account() {
   const [userName, setUserName] = useState('');
@@ -62,6 +63,7 @@ export default function Account() {
         setStreak(0);
       }
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error in fetchEntries:', error);
       setEntries([]);
       setStreak(0);
@@ -122,6 +124,7 @@ export default function Account() {
           if (localCuddleName) setCuddleName(localCuddleName);
         }
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error in fetchCuddle:', error);
         // Fallback to localStorage on any error
         const localCuddleId = storage.getCuddleId();
@@ -155,6 +158,7 @@ export default function Account() {
           body: JSON.stringify({ userId, name: newName }),
         });
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error updating username:', error);
       }
     }
@@ -179,6 +183,7 @@ export default function Account() {
         setUserName('Username');
       }
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error in fetchUserData:', error);
       setUserName('Username');
     }
@@ -216,6 +221,7 @@ export default function Account() {
         setIsModalOpen(true);
       }
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error fetching chat history:', error);
       setChatMessages([]);
       setIsModalOpen(true);
