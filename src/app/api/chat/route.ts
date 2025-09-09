@@ -25,17 +25,26 @@ export const POST = withRateLimit('chat', withErrorHandler(async (request: Reque
   }
   const { messages, userId, cuddleId } = validatedData;
 
-  const { data, error } = await saveChatMessage({ 
-    messages, 
-    userId, 
-    cuddleId, 
-    mode: validatedData.mode ?? 'flat' // default to 'flat' if undefined
-  });
+  // Declare data outside the try-catch block
+  let data;
+  try {
+    const result = await saveChatMessage({ 
+      messages, 
+      userId, 
+      cuddleId, 
+      mode: validatedData.mode ?? 'flat' // default to 'flat' if undefined
+    });
+    data = result.data;
 
-  if (error) {
-    console.error('Supabase error:', error);
+    if (result.error) {
+      console.error('Supabase error:', result.error);
+      Sentry.captureException(result.error);
+      return NextResponse.json({ success: false, error: result.error.message || String(result.error) }, { status: 500 });
+    }
+  } catch (error) {
+    console.error('Unexpected error in saveChatMessage:', error);
     Sentry.captureException(error);
-    return NextResponse.json({ success: false, error: error.message || String(error) }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 
   return NextResponse.json({ success: true, data });
@@ -55,4 +64,4 @@ export const GET = withRateLimit('chat', withErrorHandler(async (request: Reques
 
   const chatData = await fetchChatHistory(date!, userId);
   return NextResponse.json({ data: chatData || null });
-})); 
+}));
