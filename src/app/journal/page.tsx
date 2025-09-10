@@ -10,8 +10,9 @@ import type { CuddleId } from '@/types/api';
 import StreakModal from '@/components/StreakModal';
 import PrivacyModal from '@/components/PrivacyModal';
 import { useRouter } from 'next/navigation';
-import { format, isToday, set } from 'date-fns';
+import { format } from 'date-fns';
 import axios from 'axios';
+import * as Sentry from '@sentry/nextjs';
 import { event as gaEvent } from '@/lib/utils/gtag';
 import { upsertUser } from '@/lib/utils/journalDb';
 import { storage } from '@/lib/storage';
@@ -155,6 +156,7 @@ function JournalContent() {
         setMessages([]);
       }
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error fetching chat history:', error);
     }
     return
@@ -213,6 +215,7 @@ function JournalContent() {
         }, 2000);
 
       } catch (aiError) {
+        Sentry.captureException(aiError);
         console.error('Error generating AI response:', aiError);
         const fallbackReply = {
           role: 'assistant' as const,
@@ -233,6 +236,7 @@ function JournalContent() {
         });
 
         if (error) {
+          Sentry.captureException(error);
           console.error('Error saving flat journal entry:', error);
           setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
           return;
@@ -242,6 +246,7 @@ function JournalContent() {
         localStorage.setItem(`journal-submitted-${today}`, 'true');
 
       } catch (saveError) {
+        Sentry.captureException(saveError);
         console.error('Error saving flat journal entry:', saveError);
         setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
       }
@@ -274,6 +279,7 @@ function JournalContent() {
         const tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         const { data: user, error: createError } = await upsertUser({ tempSessionId });
         if (createError) {
+          Sentry.captureException(createError);
           console.error('Error creating user:', createError);
           return;
         }
@@ -286,6 +292,7 @@ function JournalContent() {
           setShowPrivacyModal(true);
         }
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error in initializeUser:', error);
       }
     };
@@ -396,6 +403,7 @@ function JournalContent() {
           }
         }
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error fetching chat history:', error);
         // Fallback to new user flow
         const cuddle = cuddleData.cuddles[selectedCuddle];
@@ -527,6 +535,7 @@ function JournalContent() {
           },
         })
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error:', error);
       }
 
@@ -574,6 +583,7 @@ function JournalContent() {
       }
       setShowInput(true);
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error in handleSubmit:', error);
       // Batch error state updates
       setIsTyping(false);
@@ -639,6 +649,7 @@ function JournalContent() {
       }, 1000);
 
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error saving journal entry:', error);
       // Batch error state updates
       setMessages(prev => [...prev, {
@@ -748,9 +759,11 @@ function JournalContent() {
         });
 
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error saving chat:', error);
       }
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error in handleFinishEntry:', error);
       setIsTyping(false);
     }
@@ -794,6 +807,7 @@ function JournalContent() {
           name: userName
         }),
       }).catch(error => {
+        Sentry.captureException(error);
         console.error('Error updating user name:', error);
       });
     }
@@ -802,6 +816,7 @@ function JournalContent() {
   // Auto-dismiss error message after 5 seconds
   useEffect(() => {
     if (errorMessage) {
+      Sentry.captureException(errorMessage);
       const timer = setTimeout(() => {
         setErrorMessage(null);
       }, 5000);
@@ -845,6 +860,7 @@ function JournalContent() {
             setHasMoreMessages(false);
           }
         } catch (error) {
+          Sentry.captureException(error);
           console.error('Error loading more messages:', error);
         } finally {
           setIsLoadingMore(false);

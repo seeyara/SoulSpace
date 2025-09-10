@@ -1,4 +1,4 @@
-import type { CuddleId, Companion } from './api';
+import type { CuddleId } from './api';
 
 // Legacy types for compatibility
 export interface Cuddle {
