@@ -13,6 +13,7 @@ import CuddleSelectionModal from '@/components/CuddleSelectionModal';
 import type { CuddleId } from '@/types/api';
 import { event as gaEvent } from '@/lib/utils/gtag';
 import { storage } from '@/lib/storage';
+import * as Sentry from '@sentry/nextjs';
 
 export default function Account() {
   const [userName, setUserName] = useState('');
@@ -40,6 +41,7 @@ export default function Account() {
         .eq('user_id', userId)
         .order('date', { ascending: true });
       if (error) {
+        Sentry.captureException(error);
         console.error('Error fetching entries:', error);
         setEntries([]);
         setStreak(0);
@@ -62,6 +64,7 @@ export default function Account() {
         setStreak(0);
       }
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error in fetchEntries:', error);
       setEntries([]);
       setStreak(0);
@@ -101,7 +104,8 @@ export default function Account() {
           .eq('id', storedUserId)
           .single();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" error
+        if (error && error.code !== 'PGRST116') {
+          Sentry.captureException(error); // PGRST116 is "not found" error
           console.error('Error fetching cuddle from Supabase:', error);
         }
 
@@ -122,6 +126,7 @@ export default function Account() {
           if (localCuddleName) setCuddleName(localCuddleName);
         }
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error in fetchCuddle:', error);
         // Fallback to localStorage on any error
         const localCuddleId = storage.getCuddleId();
@@ -155,6 +160,7 @@ export default function Account() {
           body: JSON.stringify({ userId, name: newName }),
         });
       } catch (error) {
+        Sentry.captureException(error);
         console.error('Error updating username:', error);
       }
     }
@@ -169,6 +175,7 @@ export default function Account() {
     try {
       const { data, error } = await fetchUserById(userId);
       if (error) {
+        Sentry.captureException(error);
         console.error('Error fetching user data:', error);
         setUserName('Username');
         return;
@@ -179,6 +186,7 @@ export default function Account() {
         setUserName('Username');
       }
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error in fetchUserData:', error);
       setUserName('Username');
     }
@@ -200,6 +208,7 @@ export default function Account() {
         .single();
 
       if (error) {
+        Sentry.captureException(error);
         console.error('Error fetching chat history:', error);
         setChatMessages([]);
         return;
@@ -216,6 +225,7 @@ export default function Account() {
         setIsModalOpen(true);
       }
     } catch (error) {
+      Sentry.captureException(error);
       console.error('Error fetching chat history:', error);
       setChatMessages([]);
       setIsModalOpen(true);

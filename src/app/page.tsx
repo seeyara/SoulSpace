@@ -9,6 +9,7 @@ import { storage } from '@/lib/storage';
 import DateSelector from '@/components/DateSelector';
 import ChatHistoryModal from '@/components/ChatHistoryModal';
 import { Sparkles } from 'lucide-react';
+import * as Sentry from '@sentry/nextjs';
 
 const cuddleAttributes = {
   'olly-sr': {
@@ -113,6 +114,7 @@ export default function Home() {
       .single();
 
     if (error) {
+      Sentry.captureException(error);
       console.error('Error fetching chat history:', error);
       setChatMessages([]);
       return;
@@ -131,7 +133,7 @@ export default function Home() {
     <main className="min-h-screen bg-background">
       {/* Header */}
       <header className="fixed top-0 w-full bg-background/80 backdrop-blur-sm z-50 p-4 border-b border-primary/10">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-3xl mx-auto">x
         <Image
             src="/assets/Logo.png"
             alt="Soul Logo"
