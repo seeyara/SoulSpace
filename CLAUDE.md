@@ -11,12 +11,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run lint` - Run ESLint
 - `npm run type-check` - Run TypeScript compiler without emitting files
 
-### Testing
-- `npm test` - Run Jest tests
-- `npm run test:watch` - Run tests in watch mode
-- `npm run test:coverage` - Run tests with coverage report
-- `npm run test:ci` - Run tests for CI (no watch, with coverage)
-
 ### Docker
 - `npm run docker:build` - Build Docker image
 - `npm run docker:run` - Run Docker container on port 3000
@@ -32,7 +26,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **AI**: OpenAI GPT models
 - **Auth**: Supabase Auth
 - **Rate Limiting**: Upstash Redis
-- **Testing**: Jest with React Testing Library
 - **UI Components**: Radix UI, Headless UI, Heroicons, Lucide React
 - **Animations**: Framer Motion
 
