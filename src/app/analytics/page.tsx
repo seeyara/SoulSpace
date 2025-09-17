@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { DayPicker } from 'react-day-picker';
+import 'react-day-picker/dist/style.css';
 
 interface AnalyticsData {
   dailyActiveJournalers: Array<{ date: string; activeUsers: number }>;
@@ -11,6 +13,10 @@ interface AnalyticsData {
 }
 
 export default function AnalyticsPage() {
+    const [dateRange, setDateRange] = useState<{ start: Date | undefined; end: Date | undefined }>({
+    start: undefined,
+    end: undefined,
+  });
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +25,17 @@ export default function AnalyticsPage() {
     fetchAnalytics();
   }, []);
 
-  const fetchAnalytics = async () => {
+  const handleDateChange = (range: { from: Date; to: Date }) => {
+    setDateRange({ start: range.from, end: range.to });
+    fetchAnalytics(range.from, range.to);
+  };
+
+
+  const fetchAnalytics = async (startDate?: Date, endDate?: Date) => {
+        const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate.toISOString());
+    if (endDate) params.append('end_date', endDate.toISOString());
+
     try {
       const response = await fetch('/api/analytics');
       if (!response.ok) throw new Error('Failed to fetch analytics');
@@ -31,6 +47,27 @@ export default function AnalyticsPage() {
       setLoading(false);
     }
   };
+
+  return (
+    <div>
+      <DayPicker
+        mode="range"
+        selected={dateRange}
+        onSelect={handleDateChange}
+        defaultMonth={new Date()}
+      />
+      {/* Add quick options */}
+      <div>
+        <button onClick={() => handleDateChange({ from: new Date(), to: new Date() })}>Today</button>
+        <button onClick={() => handleDateChange({ from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), to: new Date() })}>
+          Last 7 Days
+        </button>
+        <button onClick={() => handleDateChange({ from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), to: new Date() })}>
+          Last 30 Days
+        </button>
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (

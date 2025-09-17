@@ -32,7 +32,6 @@ export const cuddlePrompts: string[] = [
   "Describe a favorite memory from your childhood.",
   "What’s one thing you’d like to improve about yourself?",
   "Who’s one person who has had a positive influence on your life?",
-  "When you feel stressed, what do you do — and what could help you manage it better?",
   "What’s a book, movie, or song that’s inspired you recently?",
   "What are your top three priorities in life right now?",
   "What is a skill you've always wanted to learn or develop",
@@ -41,5 +40,6 @@ export const cuddlePrompts: string[] = [
   "What’s been lingering in the back of your mind that you haven’t gotten around to yet?",
   "What’s your “happy place”?",
   "Recall a time when you felt genuinely happy and content. (I’ll go first — mine is watching sunsets by the beach. They make all my problems disappear.)",
-  "What is one recent mistake that taught you a valuable lesson"
+  "What is one recent mistake that taught you a valuable lesson",
+  "When you feel stressed, what do you do — and what could help you manage it better?",
 ]; 
