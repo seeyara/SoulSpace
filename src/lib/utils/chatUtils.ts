@@ -22,6 +22,7 @@ export interface ChatHistory {
   cuddleId: string;
   hasMore: boolean;
   totalCount?: number;
+  mode?: 'guided' | 'flat';
 }
 
 export interface PaginatedChatHistory {
@@ -29,6 +30,7 @@ export interface PaginatedChatHistory {
     date: string;
     messages: ChatMessage[];
     cuddleId: string;
+    mode?: 'guided' | 'flat';
   }>;
   hasMore: boolean;
   nextCursor?: string;
@@ -69,7 +71,7 @@ export async function fetchUnfinishedEntry(userId: string): Promise<UnfinishedEn
     // Use optimized query with specific field selection and indexing
     const { data, error } = await supabase
       .from(prefixedTable('chats'))
-      .select('messages, cuddle_id, date')
+      .select('messages, cuddle_id, date, mode')
       .eq('user_id', userId)
       .order('date', { ascending: false })
       .limit(1)
@@ -82,9 +84,10 @@ export async function fetchUnfinishedEntry(userId: string): Promise<UnfinishedEn
     if (data?.messages && Array.isArray(data.messages) && data.messages.length > 0) {
       const lastMessage = data.messages[data.messages.length - 1];
       if (lastMessage?.role === 'user' && lastMessage?.content) {
+        const derivedMode = data.mode === 'flat' ? 'free-form' : 'guided';
         return {
           lastUnfinished: {
-            mode: 'guided',
+            mode: derivedMode,
             content: lastMessage.content
           }
         };
@@ -105,7 +108,10 @@ export async function fetchChatHistory(
 
   try {
     // Determine the query based on the available identifier
-    let query = supabase.from(prefixedTable('chats')).select('messages, cuddle_id').eq('date', date);
+    let query = supabase
+      .from(prefixedTable('chats'))
+      .select('messages, cuddle_id, mode')
+      .eq('date', date);
 
     if (userId) {
       query = query.eq('user_id', userId);
@@ -132,6 +138,7 @@ export async function fetchChatHistory(
         cuddleId: data.cuddle_id,
         hasMore: false,
         totalCount: Array.isArray(data.messages) ? data.messages.length : 0,
+        mode: data.mode as 'guided' | 'flat' | undefined,
       };
     }
 
@@ -150,7 +157,7 @@ export async function fetchPaginatedChatHistory(
 ): Promise<PaginatedChatHistory> {
   let query = supabase
     .from(prefixedTable('chats'))
-    .select('date, messages, cuddle_id, created_at')
+    .select('date, messages, cuddle_id, mode, created_at')
     .eq('user_id', userId)
     .order('date', { ascending: false })
     .limit(limit);
@@ -169,7 +176,8 @@ export async function fetchPaginatedChatHistory(
   const entries = (data || []).map(item => ({
     date: item.date,
     messages: item.messages || [],
-    cuddleId: item.cuddle_id
+    cuddleId: item.cuddle_id,
+    mode: item.mode as 'guided' | 'flat' | undefined
   }));
 
   const hasMore = entries.length === limit;

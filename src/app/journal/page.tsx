@@ -64,7 +64,7 @@ function JournalContent() {
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [isWelcomeBack, setIsWelcomeBack] = useState(false);
+  const [isContinuingEntry, setIsContinuingEntry] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [userName, setUserName] = useState<string>('Username');
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -79,6 +79,7 @@ function JournalContent() {
 
   // New dual-mode state
   const [journalMode, setJournalMode] = useState<JournalMode>('flat');
+  const [loadedEntryMode, setLoadedEntryMode] = useState<JournalMode | null>(null);
   const [showGuidedDisclaimer, setShowGuidedDisclaimer] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [flatJournalContent, setFlatJournalContent] = useState('');
@@ -148,10 +149,16 @@ function JournalContent() {
       if (data?.messages && data.messages.length > 0) {
         setMessages(data.messages);
         setIsTyping(false);
-        // setShowInput(true); // Enable input for continuing the conversation
+        setLoadedEntryMode(data.mode === 'flat' ? 'flat' : 'guided');
+        setIsContinuingEntry(true);
+        if (data.mode === 'flat') {
+          setHasSubmittedToday(true);
+        }
         console.log('Loaded chat history:', data.messages);
       } else {
         console.log('No chat history found for userId or tempSessionId');
+        setIsContinuingEntry(false);
+        setLoadedEntryMode(null);
         setMessages([]);
       }
     } catch (error) {
@@ -340,34 +347,35 @@ function JournalContent() {
         const { data } = await response.json();
         if (data?.messages && data.messages.length > 0) {
           // Returning user: Entry exists for today
-          setMessages(data.messages);
+          const entryMode: JournalMode = data.mode === 'flat' ? 'flat' : 'guided';
+          setLoadedEntryMode(entryMode);
+          setIsContinuingEntry(true);
           setHasMoreMessages(data.hasMore);
           setPage(1);
+          setIsTyping(false);
+          setShowInput(entryMode === 'guided');
+          setShowSuggestedReplies(false);
 
-          // Check if this is a flat journal entry
-          if (data.mode === 'flat') {
-            // For flat journal, just show the entry in chat without welcome back message
-            setIsWelcomeBack(true);
-            setShowInput(true);
-            setShowSuggestedReplies(false);
+          if (entryMode === 'flat') {
             setJournalingMode('free-form');
+            setHasSubmittedToday(true);
+            setShowIntroMessage(false);
+            setShowGratitudePrompt(false);
+            setMessages(data.messages);
             console.log('Loaded flat journal entry:', data.messages);
           } else {
-            // For guided journal, show welcome back message
-            setIsWelcomeBack(true);
-            setShowInput(true);
-            setShowSuggestedReplies(false);
             setJournalingMode('guided');
-            console.log('Loaded previous messages:', data.messages);
-
-            // Add welcome back message and suggested replies
-            setMessages(prev => [
+            const messagesWithWelcome = [
               ...data.messages,
-              { role: 'assistant', content: WELCOME_BACK_MESSAGE }
-            ]);
+              { role: 'assistant' as const, content: WELCOME_BACK_MESSAGE }
+            ];
+            setMessages(messagesWithWelcome);
             setShowSuggestedReplies(true);
+            console.log('Loaded previous messages:', data.messages);
           }
         } else {
+          setIsContinuingEntry(false);
+          setLoadedEntryMode(null);
           if (journalMode === 'guided') {
             // New user or no entry for today
             const cuddle = cuddleData.cuddles[selectedCuddle];
@@ -385,7 +393,7 @@ function JournalContent() {
               ]);
               setIsTyping(false);
               setShowSuggestedReplies(false);
-              setIsWelcomeBack(false);
+              setIsContinuingEntry(false);
               setShowInput(true);
               setJournalingMode('guided');
               console.log('Started new user flow');
@@ -413,7 +421,8 @@ function JournalContent() {
           ]);
           setIsTyping(false);
           setShowSuggestedReplies(false);
-          setIsWelcomeBack(false);
+          setIsContinuingEntry(false);
+          setLoadedEntryMode(null);
           setShowInput(true);
           setJournalingMode('guided');
           console.log('Started new user flow (error fallback)');
@@ -762,7 +771,7 @@ function JournalContent() {
       action: 'continue_button',
       category: 'journal',
     });
-    setIsWelcomeBack(false);
+    setIsContinuingEntry(false);
     setShowInput(false);
     setIsTyping(true);
 
@@ -919,10 +928,10 @@ function JournalContent() {
     }
 
     // Initialize flat mode if selected
-    if (userId && (savedMode === 'flat' || journalMode === 'flat') && !isWelcomeBack) {
+    if (userId && (savedMode === 'flat' || journalMode === 'flat') && !isContinuingEntry) {
       initializeFlatMode();
     }
-  }, [userId, isWelcomeBack]);
+  }, [userId, isContinuingEntry]);
 
   // Show PrivacyModal until profile is complete
   useEffect(() => {
@@ -1198,7 +1207,7 @@ function JournalContent() {
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
               </div>
             )}
-            {isWelcomeBack && messages.length > 0 && (
+            {isContinuingEntry && (loadedEntryMode ?? journalMode) === 'guided' && messages.length > 0 && (
               <div className="mb-4 text-primary font-medium text-lg">Here’s what you shared earlier today…</div>
             )}
             <AnimatePresence>
@@ -1320,7 +1329,7 @@ function JournalContent() {
         {journalMode === 'guided' && showInput && (
           <div className="flex justify-end">
             <div className="max-w-2xl mx-auto w-full sm:px-0 px-2">
-              {isWelcomeBack ? (
+              {isContinuingEntry ? (
                 <div className="flex justify-end items-center gap-2">
                   <button
                     onClick={handleFinishEntry}

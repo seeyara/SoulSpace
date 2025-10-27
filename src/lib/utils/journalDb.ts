@@ -42,7 +42,7 @@ export async function fetchChatHistory(userId: string, date: string) {
   // You can adjust the query as needed for pagination, etc.
   const { data, error } = await supabase
     .from(prefixedTable('chats'))
-    .select('*')
+    .select('id, user_id, temp_session_id, date, messages, cuddle_id, mode, created_at, updated_at')
     .eq('user_id', userId)
     .eq('date', date)
     .order('created_at', { ascending: true });
@@ -53,7 +53,7 @@ export async function fetchChatHistoryWithTempSessionId(tempSessionId: string, d
   // You can adjust the query as needed for pagination, etc.
   const { data, error } = await supabase
     .from(prefixedTable('chats'))
-    .select('*')
+    .select('id, user_id, temp_session_id, date, messages, cuddle_id, mode, created_at, updated_at')
     .eq('temp_session_id', tempSessionId)
     .eq('date', date)
     .order('created_at', { ascending: true });
