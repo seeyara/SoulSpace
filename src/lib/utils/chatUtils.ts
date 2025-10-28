@@ -59,6 +59,8 @@ export async function saveChatMessage({ messages, userId, cuddleId, mode: mode }
     mode: mode
   };
 
+  console.log("persisting", payload);
+
   const result = await supabase
     .from(prefixedTable('chats'))
     .upsert(payload);
