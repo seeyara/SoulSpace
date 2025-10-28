@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { withRateLimit } from '@/lib/rateLimiter';
 
-export async function POST(request: Request) {
+export const POST = withRateLimit('community', async (request: Request) => {
   try {
     const { replyId, userId } = await request.json();
 
@@ -48,4 +49,4 @@ export async function POST(request: Request) {
     console.error('Error toggling like:', error);
     return NextResponse.json({ error: 'Failed to toggle like' }, { status: 500 });
   }
-} 
+});

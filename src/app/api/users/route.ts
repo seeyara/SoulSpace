@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { upsertUser } from '@/lib/utils/journalDb';
+import { withRateLimit } from '@/lib/rateLimiter';
 
-export async function POST(request: Request) {
+export const POST = withRateLimit('users', async (request: Request) => {
   try {
     const { userId, name, cuddleId, cuddleName } = await request.json();
 
@@ -37,4 +38,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-} 
+});

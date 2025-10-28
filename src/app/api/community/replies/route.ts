@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabase, prefixedTable } from '@/lib/supabase';
+import { withRateLimit } from '@/lib/rateLimiter';
 
-export async function GET(request: Request) {
+export const GET = withRateLimit('community', async (request: Request) => {
   const { searchParams } = new URL(request.url);
   const questionId = searchParams.get('questionId');
 
@@ -48,9 +49,9 @@ export async function GET(request: Request) {
     console.error('Error fetching replies:', error);
     return NextResponse.json({ error: 'Failed to fetch replies' }, { status: 500 });
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withRateLimit('community', async (request: Request) => {
   try {
     const { questionId, content, userId } = await request.json();
 
@@ -85,4 +86,4 @@ export async function POST(request: Request) {
     console.error('Error creating reply:', error);
     return NextResponse.json({ error: 'Failed to create reply' }, { status: 500 });
   }
-} 
+});
