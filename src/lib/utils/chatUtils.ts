@@ -61,7 +61,7 @@ export async function saveChatMessage({ messages, userId, cuddleId, mode: mode }
 
   const result = await supabase
     .from(prefixedTable('chats'))
-    .upsert(payload);
+    .upsert(payload, { onConflict: 'user_id,date' });
 
   return result;
 }

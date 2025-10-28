@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { serverConfig } from '@/lib/config';
 import { withErrorHandler } from '@/lib/errors';
+import { withRateLimit } from '@/lib/rateLimiter';
 
 const openai = new OpenAI({
   apiKey: serverConfig.openai.apiKey,
 });
 
-export const POST = withErrorHandler(async (request: Request) => {
+export const POST = withRateLimit('openai', withErrorHandler(async (request: Request) => {
   const body = await request.json();
   const { systemPrompt, userMessage, model = 'gpt-4o', maxTokens = 150, temperature = 0.7 } = body;
 
@@ -39,4 +40,4 @@ export const POST = withErrorHandler(async (request: Request) => {
       { status: 500 }
     );
   }
-});
+}));

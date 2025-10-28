@@ -14,12 +14,13 @@ interface RateLimitEntry {
 class InMemoryRateLimit {
   private storage = new Map<string, RateLimitEntry>();
   private config: RateLimitConfig;
+  private cleanupInterval: ReturnType<typeof setInterval>;
 
   constructor(config: RateLimitConfig) {
     this.config = config;
-    
+
     // Clean up expired entries every minute
-    setInterval(() => {
+    this.cleanupInterval = setInterval(() => {
       const now = Date.now();
       for (const [key, entry] of this.storage.entries()) {
         if (now >= entry.resetTime) {
@@ -27,6 +28,10 @@ class InMemoryRateLimit {
         }
       }
     }, 60000);
+
+    if (typeof this.cleanupInterval.unref === 'function') {
+      this.cleanupInterval.unref();
+    }
   }
 
   check(identifier: string): { allowed: boolean; remaining: number; resetTime: number } {
@@ -71,15 +76,40 @@ export const rateLimitConfigs = {
   chat: { requests: 50, window: 60000 }, // 50 requests per minute
   users: { requests: 30, window: 60000 }, // 30 requests per minute
   community: { requests: 100, window: 60000 }, // 100 requests per minute
+  analytics: { requests: 10, window: 60000 }, // 10 requests per minute
+  debugData: { requests: 5, window: 60000 }, // 5 requests per minute
+  openai: { requests: 30, window: 60000 }, // 30 requests per minute
 } as const;
 
-// Create rate limiters
-const rateLimiters = {
-  chatCompletion: new InMemoryRateLimit(rateLimitConfigs.chatCompletion),
-  chat: new InMemoryRateLimit(rateLimitConfigs.chat),
-  users: new InMemoryRateLimit(rateLimitConfigs.users),
-  community: new InMemoryRateLimit(rateLimitConfigs.community),
-};
+export type RateLimiterKey = keyof typeof rateLimitConfigs;
+
+type RateLimiterMap = { [K in RateLimiterKey]: InMemoryRateLimit };
+
+function createRateLimiters(): RateLimiterMap {
+  const instances = {} as RateLimiterMap;
+
+  (Object.keys(rateLimitConfigs) as RateLimiterKey[]).forEach((key) => {
+    instances[key] = new InMemoryRateLimit(rateLimitConfigs[key]);
+  });
+
+  return instances;
+}
+
+declare global {
+  var __rateLimiters: RateLimiterMap | undefined;
+}
+
+function getRateLimiters(): RateLimiterMap {
+  if (!globalThis.__rateLimiters) {
+    globalThis.__rateLimiters = createRateLimiters();
+  }
+
+  return globalThis.__rateLimiters;
+}
+
+export function getSharedRateLimiter(limiterType: RateLimiterKey): InMemoryRateLimit {
+  return getRateLimiters()[limiterType];
+}
 
 // Get client identifier (IP address or user ID)
 function getClientIdentifier(request: Request): string {
@@ -97,12 +127,12 @@ function getClientIdentifier(request: Request): string {
 
 // Rate limiting middleware
 export function withRateLimit<TArgs extends unknown[]>(
-  limiterType: keyof typeof rateLimiters,
+  limiterType: RateLimiterKey,
   handler: (request: Request, ...args: TArgs) => Promise<Response>
 ) {
   return async (request: Request, ...args: TArgs): Promise<Response> => {
     const identifier = getClientIdentifier(request);
-    const limiter = rateLimiters[limiterType];
+    const limiter = getSharedRateLimiter(limiterType);
     const result = limiter.check(identifier);
 
     // Add rate limit headers to response
@@ -140,7 +170,10 @@ export function withRateLimit<TArgs extends unknown[]>(
       const response = await handler(request, ...args);
       return addRateLimitHeaders(response);
     } catch (error) {
-      // If handler throws, still add rate limit headers to error response
+      if (error instanceof Response) {
+        return addRateLimitHeaders(error);
+      }
+
       throw error;
     }
   };
