@@ -138,7 +138,14 @@ function JournalContent() {
     }
   };
 
+  const hasHydratedMessagesRef = useRef(false);
+
   useEffect(() => {
+    if (!hasHydratedMessagesRef.current) {
+      hasHydratedMessagesRef.current = true;
+      return;
+    }
+
     if (messages.length > 0) {
       queuePersistence(messages, { mode: journalMode, cuddleId: selectedCuddle });
     } else {

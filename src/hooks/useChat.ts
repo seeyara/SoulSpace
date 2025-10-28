@@ -47,6 +47,7 @@ export function useChat({
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const hasHydratedMessagesRef = useRef(false);
 
   const { queuePersistence, flushBeforeUnload, clearPersistence } = useChatPersistence({
     userId,
@@ -287,6 +288,11 @@ export function useChat({
 
   // Auto-save on message changes
   useEffect(() => {
+    if (!hasHydratedMessagesRef.current) {
+      hasHydratedMessagesRef.current = true;
+      return;
+    }
+
     const persistableMessages = state.messages.filter(msg => msg.status !== 'failed');
     if (persistableMessages.length > 0) {
       queuePersistence(persistableMessages);
