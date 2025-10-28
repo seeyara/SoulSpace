@@ -4,6 +4,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import axios, { AxiosError } from 'axios';
 import { storage } from '@/lib/storage';
+import { useChatPersistence } from '@/hooks/useChatPersistence';
 import type { CuddleId } from '@/types/api';
 
 export interface ChatMessage {
@@ -46,7 +47,14 @@ export function useChat({
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasHydratedMessagesRef = useRef(false);
+
+  const { queuePersistence, flushBeforeUnload, clearPersistence } = useChatPersistence({
+    userId,
+    cuddleId,
+    mode: 'guided',
+    storageEnabled: saveToStorage
+  });
 
   // Generate unique message ID
   const generateMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -86,22 +94,6 @@ export function useChat({
       messages: prev.messages.filter(msg => msg.id !== messageId)
     }));
   }, []);
-
-  // Debounced save to storage
-  const debouncedSave = useCallback((messages: ChatMessage[]) => {
-    if (!saveToStorage) return;
-
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    saveTimeoutRef.current = setTimeout(() => {
-      storage.setOngoingConversation({
-        messages: messages.filter(msg => msg.status !== 'failed'),
-        cuddle: cuddleId
-      });
-    }, 500);
-  }, [cuddleId, saveToStorage]);
 
   // Send message with retry logic
   const sendMessage = useCallback(async (
@@ -175,10 +167,6 @@ export function useChat({
           retryCount: 0 
         }));
 
-        // Save to storage and database
-        debouncedSave(state.messages);
-        await saveToDatabase();
-
         return { success: true, shouldEnd };
 
       } catch (error) {
@@ -212,26 +200,7 @@ export function useChat({
     };
 
     return attemptSend(1);
-  }, [state.messages, cuddleId, addMessage, updateMessageStatus, debouncedSave, maxRetries, retryDelay]);
-
-  // Save to database with error handling
-  const saveToDatabase = useCallback(async () => {
-    if (!userId) return;
-
-    try {
-      const messagesToSave = state.messages.filter(msg => msg.status !== 'failed');
-      
-      await axios.post('/api/chat', {
-        messages: messagesToSave,
-        userId,
-        cuddleId, 
-        mode: 'guided'
-      });
-    } catch (error) {
-      console.error('Failed to save to database:', error);
-      // Don't throw - this is background save
-    }
-  }, [state.messages, userId, cuddleId]);
+  }, [state.messages, cuddleId, addMessage, updateMessageStatus, maxRetries, retryDelay]);
 
   // Retry failed message
   const retryMessage = useCallback(async (messageId: string) => {
@@ -303,11 +272,9 @@ export function useChat({
       error: null,
       retryCount: 0
     });
-    
-    if (saveToStorage) {
-      storage.clearOngoingConversation();
-    }
-  }, [saveToStorage]);
+
+    clearPersistence();
+  }, [clearPersistence]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -315,18 +282,39 @@ export function useChat({
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
+      flushBeforeUnload();
     };
-  }, []);
+  }, [flushBeforeUnload]);
 
   // Auto-save on message changes
   useEffect(() => {
-    if (state.messages.length > 0) {
-      debouncedSave(state.messages);
+    if (!hasHydratedMessagesRef.current) {
+      hasHydratedMessagesRef.current = true;
+      return;
     }
-  }, [state.messages, debouncedSave]);
+
+    const persistableMessages = state.messages.filter(msg => msg.status !== 'failed');
+    if (persistableMessages.length > 0) {
+      queuePersistence(persistableMessages);
+    } else if (state.messages.length === 0) {
+      clearPersistence();
+    }
+  }, [state.messages, queuePersistence, clearPersistence]);
+
+  // Ensure pending writes flush before unload/navigation
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleBeforeUnload = () => {
+      void flushBeforeUnload();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      void flushBeforeUnload();
+    };
+  }, [flushBeforeUnload]);
 
   return {
     ...state,

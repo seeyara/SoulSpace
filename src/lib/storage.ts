@@ -29,8 +29,8 @@ export interface OngoingConversation {
 
 // Storage utility class
 class StorageManager {
-  clearOngoingConversation() {
-    this.removeOngoingConversation
+  clearOngoingConversation(): boolean {
+    return this.removeOngoingConversation();
   }
   private isClient = typeof window !== 'undefined';
 

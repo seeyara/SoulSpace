@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabase, prefixedTable } from '@/lib/supabase';
+import { withRateLimit } from '@/lib/rateLimiter';
 
-export async function GET() {
+export const GET = withRateLimit('analytics', async (_request: Request) => {
+  void _request;
   try {
     console.log("Table " + prefixedTable('chats'));
     // Get all chat data joined with user emails
@@ -57,7 +59,7 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});
 
 function calculateDailyActiveJournalers(chats: any[]) {
   const last30Days = new Date();

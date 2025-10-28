@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabase, prefixedTable } from '@/lib/supabase';
+import { withRateLimit } from '@/lib/rateLimiter';
 
-export async function GET() {
+export const GET = withRateLimit('debugData', async (_request: Request) => {
+  void _request;
   try {
     // Get all users with their basic info
     const { data: users, error: usersError } = await supabase
@@ -68,4 +70,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});

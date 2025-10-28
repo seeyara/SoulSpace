@@ -119,8 +119,9 @@ export async function upsertUser({ userId, email, name, tempSessionId, cuddleId,
     .upsert([upsertData])
     .select()
     .single();
-  console.log('Created new user:', data.id);
+
   if (data) {
+    console.log('Created new user:', data.id);
     storage.setUserId(data.id);
   }
   return { data, error, isExistingUser };

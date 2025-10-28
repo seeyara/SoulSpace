@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabase, prefixedTable } from '@/lib/supabase';
+import { withRateLimit } from '@/lib/rateLimiter';
 
-export async function GET() {
+export const GET = withRateLimit('community', async (_request: Request) => {
+  void _request;
   try {
     const { data: questionsData, error } = await supabase
       .from(prefixedTable('community_questions'))
@@ -27,4 +29,4 @@ export async function GET() {
     console.error('Error fetching questions:', error);
     return NextResponse.json({ error: 'Failed to fetch questions' }, { status: 500 });
   }
-} 
+});

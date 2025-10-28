@@ -16,7 +16,8 @@ import { event as gaEvent } from '@/lib/utils/gtag';
 import { upsertUser } from '@/lib/utils/journalDb';
 import { storage } from '@/lib/storage';
 import { cuddlePrompts } from '@/data/cuddles';
-import { fetchChatHistory, saveChatMessage, generateJournalResponse } from '@/lib/utils/chatUtils';
+import { fetchChatHistory, generateJournalResponse } from '@/lib/utils/chatUtils';
+import { useChatPersistence } from '@/hooks/useChatPersistence';
 
 // Import mode toggle components
 import { JournalModeRadioToggle } from '@/components/JournalModeToggle';
@@ -75,7 +76,6 @@ function JournalContent() {
   const [freeFormContent, setFreeFormContent] = useState('');
   const [showSuggestedReplies, setShowSuggestedReplies] = useState(false);
   const [lastUnfinishedEntry, setLastUnfinishedEntry] = useState<null | { mode: 'guided' | 'free-form', content: string }>(null);
-  const isSavingRef = useRef(false);
 
   // New dual-mode state
   const [journalMode, setJournalMode] = useState<JournalMode>('flat');
@@ -88,17 +88,30 @@ function JournalContent() {
   const [showGratitudePrompt, setShowGratitudePrompt] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const { queuePersistence, flushBeforeUnload, clearPersistence } = useChatPersistence({
+    userId,
+    cuddleId: selectedCuddle,
+    mode: journalMode,
+    storageEnabled: true
+  });
+
   // Handle mode change
   const handleModeChange = (mode: JournalMode) => {
+    if (mode === journalMode) {
+      return;
+    }
+
     if (mode === 'guided' && journalMode === 'flat') {
       setShowGuidedDisclaimer(true);
-    } else {
-      setJournalMode(mode);
-      localStorage.setItem('journal-mode', mode);
+      return;
+    }
 
-      if (mode === 'flat') {
-        initializeFlatMode();
-      }
+    setJournalMode(mode);
+    localStorage.setItem('journal-mode', mode);
+    storage.clearOngoingConversation();
+
+    if (mode === 'flat') {
+      initializeFlatMode();
     }
   };
 
@@ -124,6 +137,21 @@ function JournalContent() {
       getChatHistory(today);
     }
   };
+
+  const hasHydratedMessagesRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasHydratedMessagesRef.current) {
+      hasHydratedMessagesRef.current = true;
+      return;
+    }
+
+    if (messages.length > 0) {
+      queuePersistence(messages, { mode: journalMode, cuddleId: selectedCuddle });
+    } else {
+      clearPersistence();
+    }
+  }, [messages, queuePersistence, journalMode, selectedCuddle, clearPersistence]);
 
   const getChatHistory = async (date: string) => {
     // Get userId and tempSessionId from localStorage
@@ -232,18 +260,19 @@ function JournalContent() {
 
       // --- Save messages (whether AI or fallback) ---
       try {
-        const { error } = await saveChatMessage({
-          messages: finalMessages,
-          userId,
-          cuddleId: selectedCuddle,
-          mode: 'flat'
+        const success = await queuePersistence(finalMessages, {
+          immediate: true,
+          mode: 'flat',
+          cuddleId: selectedCuddle
         });
 
-        if (error) {
-          console.error('Error saving flat journal entry:', error);
+        if (!success) {
+          console.error('Error saving flat journal entry: persistence failed');
           setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
           return;
         }
+
+        storage.clearOngoingConversation();
 
         const today = format(new Date(), 'yyyy-MM-dd');
         localStorage.setItem(`journal-submitted-${today}`, 'true');
@@ -569,15 +598,6 @@ function JournalContent() {
         return updated;
       });
       setIsTyping(false);
-      storage.setOngoingConversation({
-        messages: [
-          ...messages,
-          userMessage,
-          firstAssistantMessage,
-          ...(secondMessage ? [{ role: 'assistant' as const, content: secondMessage }] : [])
-        ],
-        cuddle: selectedCuddle
-      });
       if (shouldEnd) {
         return;
       }
@@ -606,25 +626,22 @@ function JournalContent() {
     }
 
     try {
-      // Save free-form journal entry
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: [{
-            role: 'user',
-            content: freeFormContent
-          }],
-          userId: storedUserId,
-          cuddleId: selectedCuddle
-        }),
+      const success = await queuePersistence([
+        {
+          role: 'user' as const,
+          content: freeFormContent
+        }
+      ], {
+        immediate: true,
+        mode: 'flat',
+        cuddleId: selectedCuddle
       });
 
-      if (!response.ok) {
+      if (!success) {
         throw new Error('Failed to save journal entry');
       }
+
+      storage.clearOngoingConversation();
 
       // Batch state updates to prevent multiple re-renders
       setFreeFormContent('');
@@ -742,23 +759,16 @@ function JournalContent() {
       setIsTyping(false);
       setMessages(finalMessages);
 
-      try {
-        // Final save to database
-        await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messages: finalMessages,
-            userId: storedUserId,
-            cuddleId: selectedCuddle
-          }),
-        });
+      const success = await queuePersistence(finalMessages, {
+        immediate: true,
+        mode: 'guided',
+        cuddleId: selectedCuddle
+      });
 
-      } catch (error) {
-        console.error('Error saving chat:', error);
+      if (!success) {
+        console.error('Error saving chat: persistence failed');
       }
+      storage.clearOngoingConversation();
     } catch (error) {
       console.error('Error in handleFinishEntry:', error);
       setIsTyping(false);
@@ -867,47 +877,18 @@ function JournalContent() {
 
 
   useEffect(() => {
-    const saveOnUnload = () => {
-      if (isSavingRef.current) return;
-      isSavingRef.current = true;
-      const storedUserId = storage.getUserId();
-      if (!storedUserId) return;
-      // Only save if there is content
-      if ((journalingMode === 'free-form' && freeFormContent.trim()) || (journalingMode === 'guided' && messages.length > 0)) {
-        const payload = {
-          messages: journalingMode === 'free-form'
-            ? [{ role: 'user', content: freeFormContent }]
-            : messages,
-          userId: storedUserId,
-          cuddleId: selectedCuddle,
-          date: selectedDate,
-          implicit: true,
-        };
-        const url = '/api/chat';
-        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-        console.log('fallback for browsers without sendBeacon');
-        if (navigator.sendBeacon) {
-          navigator.sendBeacon(url, blob);
-        } else {
-          // fallback for browsers without sendBeacon
-          fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            keepalive: true,
-          });
-        }
-      }
-      isSavingRef.current = false;
-    };
+    if (typeof window === 'undefined') return;
+
     const handleBeforeUnload = () => {
-      saveOnUnload();
+      void flushBeforeUnload();
     };
+
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      void flushBeforeUnload();
     };
-  }, [journalingMode, freeFormContent, messages, selectedCuddle, selectedDate]);
+  }, [flushBeforeUnload]);
 
   // Helper to check if user profile is complete
   interface UserProfile {
@@ -1447,6 +1428,7 @@ function JournalContent() {
           <div className="flex flex-col space-y-3">
             <button
               onClick={() => {
+                storage.clearOngoingConversation();
                 setJournalMode('guided');
                 localStorage.setItem('journal-mode', 'guided');
                 setShowGuidedDisclaimer(false);
