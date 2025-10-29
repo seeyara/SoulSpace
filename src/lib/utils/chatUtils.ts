@@ -1,5 +1,6 @@
 import { supabase, prefixedTable } from '@/lib/supabase';
 import { format } from 'date-fns';
+import { clientConfig } from '@/lib/config';
 
 export const MESSAGES_PER_PAGE = 20;
 export const MAX_MESSAGE_HISTORY = 100;
@@ -253,7 +254,7 @@ Avoid sounding preachy, overly formal, or dramatic — aim for friendly and huma
       body: JSON.stringify({
         systemPrompt,
         userMessage: `Today's prompt: "${prompt}"\n\nMy response: "${userResponse}"`,
-        model: 'gpt-4',
+        model: clientConfig.openai.completionModel,
         maxTokens: 150,
         temperature: 0.7
       }),

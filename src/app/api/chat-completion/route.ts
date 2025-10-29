@@ -6,6 +6,7 @@ import { buildWhisprPrompt } from '@/lib/utils/buildWhisprPrompt';
 import { withRedisRateLimit } from '@/lib/withRedisRateLimit';
 import { withErrorHandler } from '@/lib/errors';
 import { ChatCompletionRequestSchema, validateRequestBody, type ChatMessage } from '@/lib/validation';
+import { getFarewellMessage } from '@/lib/utils/journalCompletion';
 
 const openai = new OpenAI({
   apiKey: serverConfig.openai.apiKey,
@@ -56,14 +57,7 @@ export const POST = withRedisRateLimit({
 
     // Handle forced end only (removed max exchanges limit)
     if (forceEnd) {
-      const farewells = {
-        'ellie-sr': "I can feel we've reached a meaningful place in our conversation. Remember, you can always hold me close as you let these thoughts settle. I'll be here whenever you need to untangle your mind again. 💜",
-        'olly-sr': "Thank you for sharing your thoughts with me today. Hold onto the positives we've discovered, and remember I'm here whenever you want to find more silver linings together. 💙",
-        'ellie-jr': "This has been such a special chat! Keep me close while you think about everything we talked about. I'm always ready for our next playful conversation! ✨",
-        'olly-jr': "What an amazing time exploring your feelings together! Snuggle with me whenever you want to discover more about yourself. Until next time! 💫"
-      };
-
-      const farewellResponse = farewells[cuddleId as CuddleId] || "I can feel how much we've shared together today. Sometimes the best conversations have natural pauses... You can always snuggle with me and let your thoughts settle. I'll be right here whenever you're ready to talk again. 💙";
+      const farewellResponse = getFarewellMessage(cuddleId as CuddleId, 'force');
       
       console.log('=== FAREWELL RESPONSE ===');
       console.log('Response:', farewellResponse);
@@ -79,14 +73,7 @@ export const POST = withRedisRateLimit({
 
     // Special handling for finish entry request
     if (message === "_finish_entry_") {
-      const farewells = {
-        'ellie-sr': "I sense you're ready to pause and reflect. That's very wise. Hold me close as you let these thoughts settle - I'll be here whenever you need me again. 💜",
-        'olly-sr': "Taking time to process is so important. I'm proud of what we've discovered together. Remember, I'm here whenever you want to find more bright spots in your day. 💙",
-        'ellie-jr': "Thanks for sharing with me! Keep me close while you think about everything - I'll be ready for our next fun chat whenever you are! ✨",
-        'olly-jr': "What wonderful discoveries we've made! Whenever you want to explore more feelings together, just hold me tight. See you soon! 💫"
-      };
-
-      const farewellResponse = farewells[cuddleId as CuddleId];
+      const farewellResponse = getFarewellMessage(cuddleId as CuddleId);
       
       console.log('=== FINISH ENTRY RESPONSE ===');
       console.log('Response:', farewellResponse);

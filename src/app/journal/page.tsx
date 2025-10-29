@@ -18,6 +18,7 @@ import { storage } from '@/lib/storage';
 import { cuddlePrompts } from '@/data/cuddles';
 import { fetchChatHistory, generateJournalResponse } from '@/lib/utils/chatUtils';
 import { useChatPersistence } from '@/hooks/useChatPersistence';
+import { completeJournalEntry } from '@/lib/api/journal';
 
 // Import mode toggle components
 import { JournalModeRadioToggle } from '@/components/JournalModeToggle';
@@ -731,47 +732,20 @@ function JournalContent() {
     setIsTyping(true);
 
     try {
-      const response = await fetch('/api/chat-completion', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: "_finish_entry_",
-          cuddleId: selectedCuddle,
-          messageHistory: messages,
-          forceEnd: true
-        }),
+      const { messages: finalMessages } = await completeJournalEntry({
+        userId: storedUserId,
+        cuddleId: selectedCuddle,
+        messages,
+        mode: journalMode,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get AI response');
-      }
-
-      const { response: aiResponse } = await response.json();
-
-      const farewellMessage = {
-        role: 'assistant' as const,
-        content: aiResponse
-      };
-
-      const finalMessages = [...messages, farewellMessage];
       setIsTyping(false);
       setMessages(finalMessages);
-
-      const success = await queuePersistence(finalMessages, {
-        immediate: true,
-        mode: 'guided',
-        cuddleId: selectedCuddle
-      });
-
-      if (!success) {
-        console.error('Error saving chat: persistence failed');
-      }
       storage.clearOngoingConversation();
     } catch (error) {
       console.error('Error in handleFinishEntry:', error);
       setIsTyping(false);
+      setShowInput(true);
     }
   };
 
@@ -1182,9 +1156,9 @@ function JournalContent() {
           </div>
         ) : (
           // Guided Journal Mode (existing chat interface)
-          <div className="max-w-3xl mx-auto space-y-4 px-4 pt-20 pb-24">
+          <div className="max-w-3xl mx-auto px-4 pt-20 pb-24">
             {isLoadingMore && (
-              <div className="flex justify-center py-4">
+              <div className="flex justify-center py-4 mb-4">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
               </div>
             )}
@@ -1206,7 +1180,7 @@ function JournalContent() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
-                      className="flex justify-end"
+                      className="flex justify-end mb-6"
                     >
                       <div className="flex flex-col max-w-[85%] items-end">
                         <div
@@ -1224,7 +1198,7 @@ function JournalContent() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
-                      className="flex justify-start gap-3"
+                      className="flex justify-start gap-3 mb-6"
                     >
                       {/* Icon column */}
                       <div className="flex-shrink-0 w-10 flex justify-center items-start">
@@ -1291,15 +1265,17 @@ function JournalContent() {
             </AnimatePresence>
 
             {/* Typing Indicator */}
-            <AnimatePresence>
-              {isTyping && journalMode === 'guided' && (
-                <TypingIndicator
-                  cuddleImage={getCuddleImage(selectedCuddle)}
-                  cuddleName={getCuddleName(selectedCuddle)}
-                  displayName={getDisplayCuddleName(selectedCuddle)}
-                />
-              )}
-            </AnimatePresence>
+            {isTyping && journalMode === 'guided' && (
+              <div className="mt-4">
+                <AnimatePresence>
+                  <TypingIndicator
+                    cuddleImage={getCuddleImage(selectedCuddle)}
+                    cuddleName={getCuddleName(selectedCuddle)}
+                    displayName={getDisplayCuddleName(selectedCuddle)}
+                  />
+                </AnimatePresence>
+              </div>
+            )}
 
             {/* Add ref for auto-scrolling */}
             <div ref={messagesEndRef} />

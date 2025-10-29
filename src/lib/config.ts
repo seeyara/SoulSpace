@@ -12,14 +12,24 @@ export const clientConfig = {
     anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
     envPrefix: process.env.NEXT_PUBLIC_SUPABASE_ENV_PREFIX || '',
   },
+  analytics: {
+    gaTrackingId: process.env.NEXT_PUBLIC_GA_TRACKING_ID || '',
+  },
+  openai: {
+    completionModel: process.env.NEXT_PUBLIC_OPENAI_COMPLETION_MODEL || 'gpt-4',
+  },
 };
 
 // Unified environment configuration for Sentry and other services
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN || '',
-  ...serverConfig,
-  ...clientConfig,
+  supabase: clientConfig.supabase,
+  analytics: clientConfig.analytics,
+  openai: {
+    ...serverConfig.openai,
+    ...clientConfig.openai,
+  },
 };
 
 // Validate required environment variables on server

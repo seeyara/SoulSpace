@@ -5,6 +5,7 @@ import BottomNav from '@/components/BottomNav';
 import GlobalAccessModal from '@/components/GlobalAccessModal';
 import Script from 'next/script';
 import Analytics from '@/components/Analytics';
+import { GA_TRACKING_ID } from '@/lib/utils/gtag';
 
 const harmoniaSans = localFont({
   src: '../../public/assets/fonts/HarmoniaSans.woff2',
@@ -25,18 +26,22 @@ export default function RootLayout({
     <html lang="en" className={harmoniaSans.variable}>
       <head>
         <link rel="icon" type="image/png" href="/assets/bookmark.png" />
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-ZN7E2WZ42B"
-          strategy="afterInteractive"
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-ZN7E2WZ42B');
-          `}
-        </Script>
+        {GA_TRACKING_ID && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${GA_TRACKING_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GA_TRACKING_ID}');
+              `}
+            </Script>
+          </>
+        )}
       </head>
       <body className="font-harmonia">
         <Analytics />
