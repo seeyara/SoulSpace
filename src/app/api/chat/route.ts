@@ -20,13 +20,14 @@ export const POST = withRateLimit('chat', withErrorHandler(async (request: Reque
     console.error('Validation error:', err);
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : String(err) }, { status: 400 });
   }
-  const { messages, userId, cuddleId } = validatedData;
+  const { messages, userId, cuddleId, date } = validatedData;
 
-  const { data, error } = await saveChatMessage({ 
-    messages, 
-    userId, 
-    cuddleId, 
-    mode: validatedData.mode ?? 'flat' // default to 'flat' if undefined
+  const { data, error } = await saveChatMessage({
+    messages,
+    userId,
+    cuddleId,
+    mode: validatedData.mode ?? 'flat', // default to 'flat' if undefined
+    date,
   });
 
   if (error) {

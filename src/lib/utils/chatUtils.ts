@@ -1,5 +1,6 @@
 import { supabase, prefixedTable } from '@/lib/supabase';
 import { format } from 'date-fns';
+import { clientConfig } from '@/lib/config';
 
 export const MESSAGES_PER_PAGE = 20;
 export const MAX_MESSAGE_HISTORY = 100;
@@ -15,6 +16,7 @@ export interface SaveChatMessageParams {
   userId: string;
   cuddleId: string;
   mode: 'guided' | 'flat';
+  date?: string;
 }
 
 export interface ChatHistory {
@@ -44,8 +46,8 @@ export interface UnfinishedEntry {
   };
 }
 
-export async function saveChatMessage({ messages, userId, cuddleId, mode: mode }: SaveChatMessageParams) {
-  const today = format(new Date(), 'yyyy-MM-dd');
+export async function saveChatMessage({ messages, userId, cuddleId, mode: mode, date }: SaveChatMessageParams) {
+  const today = date ?? format(new Date(), 'yyyy-MM-dd');
 
   // Trim messages to prevent excessive storage
   const trimmedMessages = messages.slice(-MAX_MESSAGE_HISTORY);
@@ -253,7 +255,7 @@ Avoid sounding preachy, overly formal, or dramatic — aim for friendly and huma
       body: JSON.stringify({
         systemPrompt,
         userMessage: `Today's prompt: "${prompt}"\n\nMy response: "${userResponse}"`,
-        model: 'gpt-4',
+        model: clientConfig.openai.completionModel,
         maxTokens: 150,
         temperature: 0.7
       }),

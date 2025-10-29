@@ -13,6 +13,7 @@ interface ChatPersistenceOptions {
   userId?: string;
   cuddleId: CuddleId;
   mode: 'guided' | 'flat';
+  date?: string;
   storageEnabled?: boolean;
   debounceMs?: number;
 }
@@ -21,6 +22,7 @@ interface QueuePersistenceOptions {
   immediate?: boolean;
   mode?: 'guided' | 'flat';
   cuddleId?: CuddleId;
+  date?: string;
   saveToStorage?: boolean;
 }
 
@@ -37,12 +39,13 @@ export function useChatPersistence({
   userId,
   cuddleId,
   mode,
+  date,
   storageEnabled = true,
   debounceMs = 800
 }: ChatPersistenceOptions): ChatPersistenceService {
   const latestMessagesRef = useRef<PersistableMessage[]>([]);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const contextRef = useRef({ userId, cuddleId, mode });
+  const contextRef = useRef({ userId, cuddleId, mode, date });
 
   useEffect(() => {
     contextRef.current.userId = userId;
@@ -56,8 +59,17 @@ export function useChatPersistence({
     contextRef.current.mode = mode;
   }, [mode]);
 
+  useEffect(() => {
+    contextRef.current.date = date;
+  }, [date]);
+
   const persistToSupabase = useCallback(async () => {
-    const { userId: activeUserId, cuddleId: activeCuddleId, mode: activeMode } = contextRef.current;
+    const {
+      userId: activeUserId,
+      cuddleId: activeCuddleId,
+      mode: activeMode,
+      date: activeDate,
+    } = contextRef.current;
 
     if (!activeUserId) {
       return false;
@@ -80,7 +92,8 @@ export function useChatPersistence({
         messages: sanitizedMessages,
         userId: activeUserId,
         cuddleId: activeCuddleId,
-        mode: activeMode
+        mode: activeMode,
+        date: activeDate,
       });
 
       if (error) {
@@ -109,6 +122,10 @@ export function useChatPersistence({
 
       if (options?.cuddleId) {
         contextRef.current.cuddleId = options.cuddleId;
+      }
+
+      if (options?.date) {
+        contextRef.current.date = options.date;
       }
 
       const shouldStore = options?.saveToStorage ?? storageEnabled;

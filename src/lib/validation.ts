@@ -23,16 +23,29 @@ export const ChatCompletionRequestSchema = z.object({
   }
 );
 
+export const CompleteJournalRequestSchema = z.object({
+  userId: z.string().uuid('Invalid user ID format'),
+  cuddleId: z.enum(['ellie-sr', 'olly-sr', 'ellie-jr', 'olly-jr'], {
+    errorMap: () => ({ message: 'Invalid cuddle ID' })
+  }),
+  messages: z.array(ChatMessageSchema).min(1, 'At least one message is required').max(200, 'Too many messages'),
+  mode: z.enum(['guided', 'flat'], {
+    errorMap: () => ({ message: 'Invalid mode' })
+  }).default('guided'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)'),
+});
+
 // Save chat request schema
 export const SaveChatRequestSchema = z.object({
   messages: z.array(ChatMessageSchema).min(1, 'At least one message is required').max(200, 'Too many messages'),
   userId: z.string().uuid('Invalid user ID format'),
   cuddleId: z.enum(['ellie-sr', 'olly-sr', 'ellie-jr', 'olly-jr'], {
     errorMap: () => ({ message: 'Invalid cuddle ID' })
-  }), 
+  }),
   mode: z.enum(['guided', 'flat'], {
     errorMap: () => ({ message: 'Invalid mode' })
-  }).default('flat')
+  }).default('flat'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)').optional()
 });
 
 // Get chat request schema (query params)
@@ -130,6 +143,7 @@ export function validateQueryParams<T>(schema: z.ZodSchema<T>) {
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 export type ChatCompletionRequest = z.infer<typeof ChatCompletionRequestSchema>;
 export type SaveChatRequest = z.infer<typeof SaveChatRequestSchema>;
+export type CompleteJournalRequest = z.infer<typeof CompleteJournalRequestSchema>;
 export type GetChatRequest = z.infer<typeof GetChatRequestSchema>;
 export type UserProfile = z.infer<typeof UserProfileSchema>;
 export type CommunityQuestion = z.infer<typeof CommunityQuestionSchema>;

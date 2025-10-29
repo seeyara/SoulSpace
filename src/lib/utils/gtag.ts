@@ -1,5 +1,7 @@
 // Google Analytics utility for event and pageview tracking
-export const GA_TRACKING_ID = 'G-ZN7E2WZ42B';
+import { clientConfig } from '@/lib/config';
+
+export const GA_TRACKING_ID = clientConfig.analytics.gaTrackingId;
 
 // Track a pageview
 export function pageview(url: string, referrer?: string) {

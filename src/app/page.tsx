@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { supabase, prefixedTable } from '@/lib/supabase';
 import { storage } from '@/lib/storage';
+import type { CuddleId } from '@/types/api';
 import DateSelector from '@/components/DateSelector';
 import ChatHistoryModal from '@/components/ChatHistoryModal';
 import { Sparkles } from 'lucide-react';
@@ -210,6 +211,7 @@ export default function Home() {
                   key={id}
                   onClick={() => {
                     setSelectedCuddle(id);
+                    storage.setCuddleId(id as CuddleId);
                   }}
                   className="relative cursor-pointer"
                 >
