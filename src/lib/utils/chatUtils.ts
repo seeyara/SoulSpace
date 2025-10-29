@@ -16,6 +16,7 @@ export interface SaveChatMessageParams {
   userId: string;
   cuddleId: string;
   mode: 'guided' | 'flat';
+  date?: string;
 }
 
 export interface ChatHistory {
@@ -45,8 +46,8 @@ export interface UnfinishedEntry {
   };
 }
 
-export async function saveChatMessage({ messages, userId, cuddleId, mode: mode }: SaveChatMessageParams) {
-  const today = format(new Date(), 'yyyy-MM-dd');
+export async function saveChatMessage({ messages, userId, cuddleId, mode: mode, date }: SaveChatMessageParams) {
+  const today = date ?? format(new Date(), 'yyyy-MM-dd');
 
   // Trim messages to prevent excessive storage
   const trimmedMessages = messages.slice(-MAX_MESSAGE_HISTORY);

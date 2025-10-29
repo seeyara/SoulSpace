@@ -737,6 +737,7 @@ function JournalContent() {
         cuddleId: selectedCuddle,
         messages,
         mode: journalMode,
+        date: selectedDate,
       });
 
       setIsTyping(false);

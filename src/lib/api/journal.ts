@@ -6,6 +6,7 @@ export interface CompleteJournalEntryPayload {
   cuddleId: CuddleId;
   messages: ChatMessage[];
   mode?: 'guided' | 'flat';
+  date: string;
 }
 
 export interface CompleteJournalEntryResponse {
@@ -35,6 +36,7 @@ export async function completeJournalEntry(payload: CompleteJournalEntryPayload)
       ...payload,
       messages: sanitizedMessages,
       mode: payload.mode ?? 'guided',
+      date: payload.date,
     }),
   });
 

@@ -31,7 +31,8 @@ export const CompleteJournalRequestSchema = z.object({
   messages: z.array(ChatMessageSchema).min(1, 'At least one message is required').max(200, 'Too many messages'),
   mode: z.enum(['guided', 'flat'], {
     errorMap: () => ({ message: 'Invalid mode' })
-  }).default('guided')
+  }).default('guided'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)'),
 });
 
 // Save chat request schema
@@ -40,10 +41,11 @@ export const SaveChatRequestSchema = z.object({
   userId: z.string().uuid('Invalid user ID format'),
   cuddleId: z.enum(['ellie-sr', 'olly-sr', 'ellie-jr', 'olly-jr'], {
     errorMap: () => ({ message: 'Invalid cuddle ID' })
-  }), 
+  }),
   mode: z.enum(['guided', 'flat'], {
     errorMap: () => ({ message: 'Invalid mode' })
-  }).default('flat')
+  }).default('flat'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)').optional()
 });
 
 // Get chat request schema (query params)
