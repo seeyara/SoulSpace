@@ -5,7 +5,6 @@ import { withRateLimit } from '@/lib/rateLimiter';
 export const GET = withRateLimit('analytics', async (_request: Request) => {
   void _request;
   try {
-    console.log("Table " + prefixedTable('chats'));
     // Get all chat data joined with user emails
     const { data: allChats, error: chatsError } = await supabase
       .from(prefixedTable('chats'))
