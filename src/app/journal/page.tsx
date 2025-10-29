@@ -29,6 +29,10 @@ import TypingIndicator from '@/components/TypingIndicator';
 // Journal mode type
 export type JournalMode = 'flat' | 'guided';
 
+const VALID_CUDDLE_IDS: CuddleId[] = ['ellie-sr', 'olly-sr', 'ellie-jr', 'olly-jr'];
+const isValidCuddleId = (id: string | null): id is CuddleId =>
+  !!id && (VALID_CUDDLE_IDS as readonly string[]).includes(id);
+
 const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue or finish our conversation?";
 const INTRO_MESSAGE = "Hello, I'm {{cuddle_name}}, your companion for this journey. Let's take this time to reset and rejuvenate";
 
@@ -57,8 +61,20 @@ function JournalContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [userId, setUserId] = useState<string>('');
-  const [selectedCuddle, setSelectedCuddle] = useState<CuddleId>('ellie-sr');
   const [selectedDate] = useState<string>(searchParams.get('date') || format(new Date(), 'yyyy-MM-dd'));
+  const [selectedCuddle, setSelectedCuddle] = useState<CuddleId>(() => {
+    const queryCuddle = searchParams.get('cuddle');
+    if (isValidCuddleId(queryCuddle)) {
+      return queryCuddle;
+    }
+    if (typeof window !== 'undefined') {
+      const storedCuddle = storage.getCuddleId();
+      if (isValidCuddleId(storedCuddle)) {
+        return storedCuddle;
+      }
+    }
+    return 'ellie-sr';
+  });
   const [isTyping, setIsTyping] = useState(true);
   const [userResponse, setUserResponse] = useState('');
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
@@ -93,6 +109,7 @@ function JournalContent() {
     userId,
     cuddleId: selectedCuddle,
     mode: journalMode,
+    date: selectedDate,
     storageEnabled: true
   });
 
@@ -148,11 +165,11 @@ function JournalContent() {
     }
 
     if (messages.length > 0) {
-      queuePersistence(messages, { mode: journalMode, cuddleId: selectedCuddle });
+      queuePersistence(messages, { mode: journalMode, cuddleId: selectedCuddle, date: selectedDate });
     } else {
       clearPersistence();
     }
-  }, [messages, queuePersistence, journalMode, selectedCuddle, clearPersistence]);
+  }, [messages, queuePersistence, journalMode, selectedCuddle, selectedDate, clearPersistence]);
 
   const getChatHistory = async (date: string) => {
     // Get userId and tempSessionId from localStorage
@@ -264,7 +281,8 @@ function JournalContent() {
         const success = await queuePersistence(finalMessages, {
           immediate: true,
           mode: 'flat',
-          cuddleId: selectedCuddle
+          cuddleId: selectedCuddle,
+          date: selectedDate
         });
 
         if (!success) {
@@ -332,9 +350,25 @@ function JournalContent() {
 
   // Load userId and selectedCuddle from localStorage on mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setUserId(storage.getUserId() || '');
-      setSelectedCuddle((storage.getCuddleId() || searchParams.get('cuddle') || 'ellie-sr') as CuddleId);
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    setUserId(storage.getUserId() || '');
+
+    const queryCuddle = searchParams.get('cuddle');
+    const storedCuddle = storage.getCuddleId();
+
+    const nextCuddle: CuddleId = isValidCuddleId(queryCuddle)
+      ? queryCuddle
+      : isValidCuddleId(storedCuddle)
+        ? storedCuddle
+        : 'ellie-sr';
+
+    setSelectedCuddle(nextCuddle);
+
+    if (isValidCuddleId(queryCuddle) && queryCuddle !== storedCuddle) {
+      storage.setCuddleId(queryCuddle);
     }
   }, [searchParams]);
 
@@ -635,7 +669,8 @@ function JournalContent() {
       ], {
         immediate: true,
         mode: 'flat',
-        cuddleId: selectedCuddle
+        cuddleId: selectedCuddle,
+        date: selectedDate
       });
 
       if (!success) {

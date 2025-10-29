@@ -48,11 +48,13 @@ export function useChat({
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const hasHydratedMessagesRef = useRef(false);
+  const [entryDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   const { queuePersistence, flushBeforeUnload, clearPersistence } = useChatPersistence({
     userId,
     cuddleId,
     mode: 'guided',
+    date: entryDate,
     storageEnabled: saveToStorage
   });
 
