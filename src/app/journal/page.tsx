@@ -151,7 +151,6 @@ function JournalContent() {
         const storedUserId = storage.getUserId();
 
         if (storedUserId) {
-          console.log('Using stored user ID:', storedUserId);
           setUserId(storedUserId);
 
           // Check if user has a custom name
@@ -223,19 +222,6 @@ function JournalContent() {
 
   // Add logging for key state changes
   useEffect(() => {
-    console.log('userId changed:', userId);
-  }, [userId]);
-  useEffect(() => {
-    console.log('selectedCuddle changed:', selectedCuddle);
-  }, [selectedCuddle]);
-  useEffect(() => {
-    console.log('selectedDate changed:', selectedDate);
-  }, [selectedDate]);
-  useEffect(() => {
-    console.log('showPrivacyModal changed:', showPrivacyModal);
-  }, [showPrivacyModal]);
-
-  useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
@@ -290,7 +276,6 @@ function JournalContent() {
         setHasLoadedGuidedEntry(false);
         setHasMoreMessages(false);
         setPage(1);
-        console.log('Started new user flow');
       }, 1000);
     };
 
@@ -355,12 +340,10 @@ function JournalContent() {
             'Content-Type': 'application/json',
             'x-user-profile': userProfile ? JSON.stringify(userProfile) : ''
           },
-        })
+        });
       } catch (error) {
         console.error('Error:', error);
       }
-
-      console.log("response", response)
 
       if (!response) {
         throw new Error('Failed to get AI response or response is null');

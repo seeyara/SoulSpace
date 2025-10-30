@@ -60,8 +60,6 @@ export async function saveChatMessage({ messages, userId, cuddleId, date }: Save
     mode: 'guided'
   };
 
-  console.log("persisting", payload);
-
   const result = await supabase
     .from(prefixedTable('chats'))
     .upsert(payload, { onConflict: 'user_id, date' });
@@ -106,8 +104,6 @@ export async function fetchChatHistory(
   userId?: string,
   tempSessionId?: string
 ): Promise<ChatHistory | null> {
-  console.log('Querying with userId:', userId, 'tempSessionId:', tempSessionId, 'and date:', date);
-
   try {
     // Determine the query based on the available identifier
     let query = supabase
@@ -126,9 +122,6 @@ export async function fetchChatHistory(
 
     // Execute the query
     const { data, error } = await query.maybeSingle();
-
-    // Log the results for debugging
-    console.log('Chat data:', data, 'Error:', error);
 
     if (error) {
       throw error;
