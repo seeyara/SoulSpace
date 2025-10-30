@@ -124,7 +124,7 @@ export default function GlobalAccessModal() {
   const handleCodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (code.trim().toUpperCase() === 'JOURNAL21') {
+    if (code.trim().toUpperCase() === 'CUDDLESARMY') {
       const { error: persistError } = await persistEmail(email);
       if (persistError) {
         console.error('Error saving email during code submit:', persistError);

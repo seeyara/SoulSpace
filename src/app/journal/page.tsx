@@ -694,16 +694,16 @@ function JournalContent() {
             className="h-8 w-auto cursor-pointer"
             onClick={() => router.push('/')}
           />
-          <div className="text-sm font-medium text-primary">
+          {/* <div className="text-sm font-medium text-primary">
             Guided journaling with {getDisplayCuddleName(selectedCuddle)}
-          </div>
+          </div> */}
         </div>
       </header>
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto" ref={messagesContainerRef}>
         
-          <div className="max-w-3xl mx-auto px-4 pt-20 pb-24">
+          <div className="max-w-3xl mx-auto px-4 pt-20">
             {isLoadingMore && (
               <div className="flex justify-center py-4 mb-4">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
