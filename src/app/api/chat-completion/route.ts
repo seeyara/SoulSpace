@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import type { CuddleId } from '@/types/api';
 import { serverConfig } from '@/lib/config';
-import { buildWhisprPrompt } from '@/lib/utils/buildWhisprPrompt';
+import { buildWhisprPrompt, type WhisprUserProfile } from '@/lib/utils/buildWhisprPrompt';
 import { withRedisRateLimit } from '@/lib/withRedisRateLimit';
 import { withErrorHandler } from '@/lib/errors';
 import { ChatCompletionRequestSchema, validateRequestBody, type ChatMessage } from '@/lib/validation';
@@ -48,7 +48,7 @@ export const POST = withRedisRateLimit({
   console.log('Force End:', forceEnd);
 
   // Load user profile from database for personalised prompts
-  let userProfile: Record<string, unknown> | null = null;
+  let userProfile: WhisprUserProfile | undefined;
   if (userId || tempSessionId) {
     try {
       const { data, error } = await fetchUserProfile({ userId, tempSessionId });
@@ -57,14 +57,28 @@ export const POST = withRedisRateLimit({
           console.error('Failed to load user for prompt personalisation:', error);
         }
       } else if (data) {
-        const { cuddle_ownership, gender, life_stage, age, city, mood } = data as Record<string, unknown>;
+        const {
+          cuddle_ownership,
+          gender,
+          life_stage,
+          cuddle_name,
+          cuddle_id,
+          age,
+          city,
+          mood,
+        } = data as Record<string, unknown>;
+
         userProfile = {
-          cuddleOwnership: cuddle_ownership ?? undefined,
-          gender: typeof gender === 'string' ? gender : undefined,
-          lifestage: typeof life_stage === 'string' ? life_stage : undefined,
+          cuddleOwnership: typeof cuddle_ownership === 'string' && cuddle_ownership.trim()
+            ? cuddle_ownership
+            : undefined,
+          gender: typeof gender === 'string' && gender.trim() ? gender : undefined,
+          lifeStage: typeof life_stage === 'string' && life_stage.trim() ? life_stage : undefined,
+          cuddleName: typeof cuddle_name === 'string' && cuddle_name.trim() ? cuddle_name : undefined,
+          cuddleId: typeof cuddle_id === 'string' && cuddle_id.trim() ? cuddle_id : undefined,
           age: typeof age === 'number' ? age : undefined,
-          city: typeof city === 'string' ? city : undefined,
-          mood: typeof mood === 'string' ? mood : undefined,
+          city: typeof city === 'string' && city.trim() ? city : undefined,
+          mood: typeof mood === 'string' && mood.trim() ? mood : undefined,
         };
         console.log('User Profile (db):', userProfile);
       }
@@ -106,7 +120,7 @@ export const POST = withRedisRateLimit({
   }
 
   // Build the system prompt using the user profile
-  const systemPrompt = buildWhisprPrompt(userProfile || {});
+  const systemPrompt = buildWhisprPrompt(userProfile);
 
   const openAiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
