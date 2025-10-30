@@ -7,7 +7,7 @@ import { withRedisRateLimit } from '@/lib/withRedisRateLimit';
 import { withErrorHandler } from '@/lib/errors';
 import { ChatCompletionRequestSchema, validateRequestBody, type ChatMessage } from '@/lib/validation';
 import { getFarewellMessage } from '@/lib/utils/journalCompletion';
-import { fetchUserById } from '@/lib/utils/journalDb';
+import { fetchUserProfile } from '@/lib/utils/journalDb';
 
 const openai = new OpenAI({
   apiKey: serverConfig.openai.apiKey,
@@ -23,7 +23,10 @@ export const POST = withRedisRateLimit({
       const body = req.body ? req.body : null;
       if (body) {
         const parsed = typeof body === 'string' ? JSON.parse(body) : body;
-        if (parsed && parsed.userId) return parsed.userId;
+        if (parsed) {
+          if (parsed.userId) return parsed.userId;
+          if (parsed.tempSessionId) return parsed.tempSessionId;
+        }
       }
     } catch {}
     return req.headers.get('x-user-id') || 'anonymous';
@@ -31,7 +34,7 @@ export const POST = withRedisRateLimit({
 })(withErrorHandler(async (request: Request) => {
   const body = await request.json();
   const validatedData = validateRequestBody(ChatCompletionRequestSchema)(body);
-  const { message, cuddleId, messageHistory, forceEnd, userId } = validatedData;
+  const { message, cuddleId, messageHistory, forceEnd, userId, tempSessionId } = validatedData;
 
   const exchangeCount = Math.floor((messageHistory.length - 2) / 2) + 1; // Subtract 2 for intro and first prompt
 
@@ -46,30 +49,28 @@ export const POST = withRedisRateLimit({
 
   // Load user profile from database for personalised prompts
   let userProfile: Record<string, unknown> | null = null;
-  try {
-    const { data, error } = await fetchUserById(userId);
-    if (error) {
-      if ((error as { code?: string }).code !== 'PGRST116') {
-        console.error('Failed to load user for prompt personalisation:', error);
+  if (userId || tempSessionId) {
+    try {
+      const { data, error } = await fetchUserProfile({ userId, tempSessionId });
+      if (error) {
+        if ((error as { code?: string }).code !== 'PGRST116') {
+          console.error('Failed to load user for prompt personalisation:', error);
+        }
+      } else if (data) {
+        const { cuddle_ownership, gender, life_stage, age, city, mood } = data as Record<string, unknown>;
+        userProfile = {
+          cuddleOwnership: cuddle_ownership ?? undefined,
+          gender: typeof gender === 'string' ? gender : undefined,
+          lifestage: typeof life_stage === 'string' ? life_stage : undefined,
+          age: typeof age === 'number' ? age : undefined,
+          city: typeof city === 'string' ? city : undefined,
+          mood: typeof mood === 'string' ? mood : undefined,
+        };
+        console.log('User Profile (db):', userProfile);
       }
-    } else if (data) {
-      const { cuddle_ownership, gender, life_stage, lifestage, age, city, mood } = data as Record<string, unknown>;
-      userProfile = {
-        cuddleOwnership: cuddle_ownership ?? undefined,
-        gender: typeof gender === 'string' ? gender : undefined,
-        lifestage: typeof life_stage === 'string'
-          ? life_stage
-          : typeof lifestage === 'string'
-            ? lifestage
-            : undefined,
-        age: typeof age === 'number' ? age : undefined,
-        city: typeof city === 'string' ? city : undefined,
-        mood: typeof mood === 'string' ? mood : undefined,
-      };
-      console.log('User Profile (db):', userProfile);
+    } catch (error) {
+      console.error('Unexpected error loading user profile:', error);
     }
-  } catch (error) {
-    console.error('Unexpected error loading user profile:', error);
   }
 
   // Handle forced end only (removed max exchanges limit)

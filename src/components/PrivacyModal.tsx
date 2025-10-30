@@ -24,7 +24,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const applyProfileState = useCallback((incoming?: Partial<UserProfile> & { lifestage?: string }) => {
+  const applyProfileState = useCallback((incoming?: Partial<UserProfile> & { lifestage?: string; life_stage?: string }) => {
     if (!incoming) {
       setStep('privacy');
       setProfile({ cuddleOwnership: '', gender: '', lifeStage: '' });
@@ -34,7 +34,7 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
     const nextProfile: UserProfile = {
       cuddleOwnership: incoming.cuddleOwnership ?? '',
       gender: incoming.gender ?? '',
-      lifeStage: incoming.lifeStage ?? incoming.lifestage ?? '',
+      lifeStage: incoming.lifeStage ?? incoming.lifestage ?? incoming.life_stage ?? '',
     };
 
     setProfile(nextProfile);
@@ -59,42 +59,50 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
       const storedProfile = localStorage.getItem('user_profile');
       if (storedProfile) {
         try {
-          const parsed = JSON.parse(storedProfile) as Partial<UserProfile> & { lifestage?: string };
+          const parsed = JSON.parse(storedProfile) as Partial<UserProfile> & { lifestage?: string; life_stage?: string };
           applyProfileState(parsed);
-          return;
         } catch (error) {
           console.error('Failed to parse stored profile:', error);
+          applyProfileState();
         }
+      } else {
+        applyProfileState();
       }
 
       const storedUserId = localStorage.getItem('soul_journal_user_id');
-      if (!storedUserId) {
-        applyProfileState();
+      const storedSessionId = localStorage.getItem('soul_journal_session_id');
+
+      if (!storedUserId && !storedSessionId) {
         return;
       }
 
+      const params = new URLSearchParams();
+      if (storedUserId) {
+        params.set('userId', storedUserId);
+      }
+      if (storedSessionId) {
+        params.set('tempSessionId', storedSessionId);
+      }
+
       try {
-        const response = await fetch(`/api/users/profile?userId=${encodeURIComponent(storedUserId)}`);
+        const response = await fetch(`/api/users/profile?${params.toString()}`);
         if (!response.ok) {
-          applyProfileState();
           return;
         }
 
-        const { profile: remoteProfile } = await response.json() as { profile?: Partial<UserProfile> | null };
+        type RemoteProfile = Partial<UserProfile> & { life_stage?: string; lifestage?: string };
+        const { profile: remoteProfile } = await response.json() as { profile?: RemoteProfile | null };
         if (remoteProfile) {
           const normalized: UserProfile = {
             cuddleOwnership: remoteProfile.cuddleOwnership ?? '',
             gender: remoteProfile.gender ?? '',
-            lifeStage: remoteProfile.lifeStage ?? (remoteProfile as any).lifestage ?? '',
+            lifeStage: remoteProfile.lifeStage ?? remoteProfile.lifestage ?? remoteProfile.life_stage ?? '',
           };
           localStorage.setItem('user_profile', JSON.stringify(normalized));
           applyProfileState(normalized);
-        } else {
-          applyProfileState();
         }
       } catch (error) {
         console.error('Failed to fetch profile from database:', error);
-        applyProfileState();
       }
     };
 
@@ -135,11 +143,21 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
     try {
       localStorage.setItem('user_profile', JSON.stringify(profile));
       const userId = localStorage.getItem('soul_journal_user_id');
-      if (userId) {
+      const tempSessionId = localStorage.getItem('soul_journal_session_id');
+
+      if (userId || tempSessionId) {
+        const payload: Record<string, unknown> = { profile };
+        if (userId) {
+          payload.userId = userId;
+        }
+        if (tempSessionId) {
+          payload.tempSessionId = tempSessionId;
+        }
+
         const response = await fetch('/api/users/profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, profile }),
+          body: JSON.stringify(payload),
         });
         if (!response.ok) {
           console.error('Failed to save profile to database');

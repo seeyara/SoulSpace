@@ -110,7 +110,8 @@ export interface ChatCompletionRequest {
   cuddleId: CuddleId;
   messageHistory: ChatMessage[];
   forceEnd?: boolean;
-  userId: string;
+  userId?: string;
+  tempSessionId?: string;
 }
 
 export interface ChatCompletionResponse {

@@ -15,12 +15,19 @@ export const ChatCompletionRequestSchema = z.object({
   }),
   messageHistory: z.array(ChatMessageSchema).max(100, 'Message history too long'),
   forceEnd: z.boolean().optional(),
-  userId: z.string().uuid('Invalid user ID format')
+  userId: z.string().uuid('Invalid user ID format').optional(),
+  tempSessionId: z.string().min(1, 'Session identifier is required').optional()
 }).refine(
   (data) => data.message || data.forceEnd || data.message === "_finish_entry_",
   {
     message: 'Message is required unless forcing end',
     path: ['message']
+  }
+).refine(
+  (data) => Boolean(data.userId || data.tempSessionId),
+  {
+    message: 'User or session identifier is required',
+    path: ['userId']
   }
 );
 

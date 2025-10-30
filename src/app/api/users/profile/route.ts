@@ -1,26 +1,31 @@
 import { NextResponse } from 'next/server';
-import { fetchUserById, upsertUser } from '@/lib/utils/journalDb';
+import { fetchUserProfile, upsertUserProfile } from '@/lib/utils/journalDb';
 import { withRateLimit } from '@/lib/rateLimiter';
 
 export const POST = withRateLimit('users', async (request: Request) => {
   try {
-    const { userId, profile } = await request.json();
+    const { userId, tempSessionId, profile } = await request.json();
 
-    if (!userId || !profile) {
+    if (!profile || (!userId && !tempSessionId)) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // Clean and validate userId - remove any extra quotes or whitespace
-    const cleanUserId = userId.toString().trim().replace(/^"+|"+$/g, '');
+    const cleanUserId = userId
+      ? userId.toString().trim().replace(/^"+|"+$/g, '')
+      : undefined;
+    const cleanTempSessionId = tempSessionId
+      ? tempSessionId.toString().trim().replace(/^"+|"+$/g, '')
+      : undefined;
 
-    // Use upsertUser utility for updating profile
-    const { data: newUserId, error } = await upsertUser({
+    const { data, error } = await upsertUserProfile({
       userId: cleanUserId,
+      tempSessionId: cleanTempSessionId,
       profile,
     });
+
     if (error) {
       console.error('Error updating user profile:', error);
       return NextResponse.json(
@@ -28,10 +33,18 @@ export const POST = withRateLimit('users', async (request: Request) => {
         { status: 500 }
       );
     }
+
+    const responseProfile = {
+      cuddleOwnership: data?.cuddle_ownership ?? null,
+      gender: data?.gender ?? null,
+      lifeStage: data?.life_stage ?? null,
+    };
+
     return NextResponse.json({
       success: true,
-      newUserId,
-      profile,
+      userId: data?.id ?? cleanUserId ?? null,
+      tempSessionId: data?.temp_session_id ?? cleanTempSessionId ?? null,
+      profile: responseProfile,
     });
   } catch (error) {
     console.error('Error in profile update:', error);
@@ -46,14 +59,23 @@ export const GET = withRateLimit('users', async (request: Request) => {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
+    const tempSessionId = searchParams.get('tempSessionId');
 
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    if (!userId && !tempSessionId) {
+      return NextResponse.json({ error: 'A user identifier is required' }, { status: 400 });
     }
 
-    const cleanUserId = userId.toString().trim().replace(/^"+|"+$/g, '');
+    const cleanUserId = userId
+      ? userId.toString().trim().replace(/^"+|"+$/g, '')
+      : undefined;
+    const cleanTempSessionId = tempSessionId
+      ? tempSessionId.toString().trim().replace(/^"+|"+$/g, '')
+      : undefined;
 
-    const { data, error } = await fetchUserById(cleanUserId);
+    const { data, error } = await fetchUserProfile({
+      userId: cleanUserId,
+      tempSessionId: cleanTempSessionId,
+    });
 
     if (error) {
       if ((error as { code?: string }).code === 'PGRST116') {
@@ -70,10 +92,14 @@ export const GET = withRateLimit('users', async (request: Request) => {
     const responseProfile = {
       cuddleOwnership: data.cuddle_ownership ?? null,
       gender: data.gender ?? null,
-      lifeStage: data.life_stage ?? data.lifestage ?? null,
+      lifeStage: data.life_stage ?? null,
     };
 
-    return NextResponse.json({ profile: responseProfile });
+    return NextResponse.json({
+      profile: responseProfile,
+      userId: data.id ?? null,
+      tempSessionId: data.temp_session_id ?? null,
+    });
   } catch (error) {
     console.error('Error retrieving profile:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

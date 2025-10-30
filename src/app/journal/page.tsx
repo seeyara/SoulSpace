@@ -184,6 +184,12 @@ function JournalContent() {
   useEffect(() => {
     const initializeUser = async () => {
       try {
+        let sessionId = storage.getSessionId();
+        if (!sessionId) {
+          sessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          storage.setSessionId(sessionId);
+        }
+
         const storedUserId = storage.getUserId();
 
         if (storedUserId) {
@@ -217,7 +223,7 @@ function JournalContent() {
         }
 
         // Create new user without setting a name
-        const tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const tempSessionId = sessionId ?? `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         const { data: user, error: createError } = await upsertUser({ tempSessionId });
         if (createError) {
           console.error('Error creating user:', createError);
@@ -391,12 +397,22 @@ function JournalContent() {
 
       let response;
       try {
-        response = await axios.post('/api/chat-completion', {
+        const storedSessionId = storage.getSessionId();
+        const payload: Record<string, unknown> = {
           message: userMessage.content,
           cuddleId: selectedCuddle,
           messageHistory: messageHistoryToSend,
-          userId: storedUserId,
-        });
+        };
+
+        if (storedUserId) {
+          payload.userId = storedUserId;
+        }
+
+        if (storedSessionId) {
+          payload.tempSessionId = storedSessionId;
+        }
+
+        response = await axios.post('/api/chat-completion', payload);
       } catch (error) {
         console.error('Error:', error);
       }
