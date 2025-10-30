@@ -1,10 +1,7 @@
 'use client';
 
-// Feature flag for PrivacyModal (enabled by default unless explicitly disabled)
-const PRIVACY_MODAL_ENABLED = process.env.NEXT_PUBLIC_PRIVACY_MODAL_ENABLED !== 'false';
-
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import BaseModal from './BaseModal';
 
 interface PrivacyModalProps {
@@ -19,8 +16,6 @@ interface UserProfile {
 }
 
 export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
-  if (!PRIVACY_MODAL_ENABLED) return null;
-
   const [step, setStep] = useState<'privacy' | 'cuddle' | 'gender' | 'lifeStage' | 'done'>('privacy');
   const [profile, setProfile] = useState<UserProfile>({
     cuddleOwnership: '',
@@ -28,6 +23,43 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
     lifeStage: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') {
+      return;
+    }
+
+    const storedProfile = localStorage.getItem('user_profile');
+    if (!storedProfile) {
+      setStep('privacy');
+      setProfile({ cuddleOwnership: '', gender: '', lifeStage: '' });
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(storedProfile) as Partial<UserProfile> & { lifestage?: string };
+      const lifeStage = parsed.lifeStage ?? parsed.lifestage ?? '';
+
+      setProfile({
+        cuddleOwnership: parsed.cuddleOwnership ?? '',
+        gender: parsed.gender ?? '',
+        lifeStage
+      });
+
+      if (parsed.cuddleOwnership && parsed.gender && lifeStage) {
+        setStep('done');
+      } else if (parsed.cuddleOwnership && parsed.gender) {
+        setStep('lifeStage');
+      } else if (parsed.cuddleOwnership) {
+        setStep('gender');
+      } else {
+        setStep('privacy');
+      }
+    } catch {
+      setStep('privacy');
+      setProfile({ cuddleOwnership: '', gender: '', lifeStage: '' });
+    }
+  }, [isOpen]);
 
   const handleProfileChange = (field: keyof UserProfile, value: string) => {
     setProfile(prev => ({
@@ -63,7 +95,6 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
     try {
       localStorage.setItem('user_profile', JSON.stringify(profile));
       const userId = localStorage.getItem('soul_journal_user_id');
-      console.log('Submitting profile to API:', { userId, profile });
       if (userId) {
         const response = await fetch('/api/users/profile', {
           method: 'POST',
@@ -73,6 +104,9 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
         if (!response.ok) {
           console.error('Failed to save profile to database');
         }
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('soul:profile-updated'));
       }
       setTimeout(() => { onClose(); }, 1000);
     } catch (error) {

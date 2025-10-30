@@ -29,10 +29,40 @@ interface UserProfile {
   cuddleOwnership?: string;
   gender?: string;
   lifeStage?: string;
+  lifestage?: string;
 }
 
 const isProfileComplete = (profile: UserProfile | null | undefined): boolean => {
-  return Boolean(profile?.cuddleOwnership && profile?.gender && profile?.lifeStage);
+  if (!profile) {
+    return false;
+  }
+
+  const lifeStage = profile.lifeStage ?? profile.lifestage;
+
+  return Boolean(profile.cuddleOwnership && profile.gender && lifeStage);
+};
+
+const readStoredProfile = (): UserProfile | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const profileStr = localStorage.getItem('user_profile');
+  if (!profileStr) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(profileStr) as UserProfile;
+
+    return {
+      cuddleOwnership: parsed.cuddleOwnership,
+      gender: parsed.gender,
+      lifeStage: parsed.lifeStage ?? parsed.lifestage
+    };
+  } catch {
+    return null;
+  }
 };
 
 function JournalContent() {
@@ -59,6 +89,7 @@ function JournalContent() {
   const [showInput, setShowInput] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [hasEvaluatedPrivacy, setHasEvaluatedPrivacy] = useState(false);
   const [hasGlobalAccess, setHasGlobalAccess] = useState(() => {
     if (typeof window === 'undefined') {
       return false;
@@ -241,7 +272,7 @@ function JournalContent() {
 
   // Main chat history fetch effect with logging
   useEffect(() => {
-    if (!hasGlobalAccess || showPrivacyModal || messages.length > 0) {
+    if (!hasGlobalAccess || !hasEvaluatedPrivacy || showPrivacyModal || messages.length > 0) {
       return;
     }
 
@@ -284,7 +315,7 @@ function JournalContent() {
     return () => {
       isCancelled = true;
     };
-  }, [selectedCuddle, showPrivacyModal, messages.length, hasGlobalAccess, getChatHistory]);
+  }, [selectedCuddle, showPrivacyModal, messages.length, hasGlobalAccess, getChatHistory, hasEvaluatedPrivacy]);
 
   useEffect(() => {
     // Load ongoing conversation from localStorage if exists
@@ -570,36 +601,45 @@ function JournalContent() {
   useEffect(() => {
     if (!hasGlobalAccess) {
       setShowPrivacyModal(false);
+      setHasEvaluatedPrivacy(false);
       return;
     }
 
+    const storedProfile = readStoredProfile();
+    setShowPrivacyModal(!isProfileComplete(storedProfile));
+    setHasEvaluatedPrivacy(true);
+  }, [hasGlobalAccess]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
 
-    const profileStr = localStorage.getItem('user_profile');
-    let profile = null;
-    try {
-      profile = profileStr ? JSON.parse(profileStr) : null;
-    } catch { }
+    const handleProfileUpdate = () => {
+      const storedProfile = readStoredProfile();
+      setShowPrivacyModal(!isProfileComplete(storedProfile));
+      if (hasGlobalAccess) {
+        setHasEvaluatedPrivacy(true);
+      }
+    };
 
-    setShowPrivacyModal(!isProfileComplete(profile));
+    window.addEventListener('soul:profile-updated', handleProfileUpdate);
+
+    return () => {
+      window.removeEventListener('soul:profile-updated', handleProfileUpdate);
+    };
   }, [hasGlobalAccess]);
 
   // When PrivacyModal closes, re-check profile completeness
   const handlePrivacyModalClose = () => {
-    if (typeof window !== 'undefined') {
-      const profileStr = localStorage.getItem('user_profile');
-      let profile = null;
-      try {
-        profile = profileStr ? JSON.parse(profileStr) : null;
-      } catch { }
-      if (!isProfileComplete(profile)) {
-        setShowPrivacyModal(true);
-      } else {
-        setShowPrivacyModal(false);
-      }
+    const storedProfile = readStoredProfile();
+
+    if (!isProfileComplete(storedProfile)) {
+      setShowPrivacyModal(true);
+      return;
     }
+
+    setShowPrivacyModal(false);
   };
 
   return (
