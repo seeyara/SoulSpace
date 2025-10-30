@@ -68,6 +68,17 @@ interface UpsertUserParams {
   lifeStage?: string;
 }
 
+type SupabaseUserRow = {
+  id: string;
+  email?: string | null;
+  temp_session_id?: string | null;
+  name?: string | null;
+  cuddle_ownership?: string | null;
+  gender?: string | null;
+  life_stage?: string | null;
+  lifestage?: string | null;
+};
+
 export async function upsertUser({
   userId,
   email,
@@ -81,49 +92,84 @@ export async function upsertUser({
   lifeStage,
 }: UpsertUserParams) {
   let isExistingUser = false;
-  
-  // If email is provided, check if user already exists
-  if (email) {
-    const { data: existingUser } = await supabase
+  const normalizedEmail = typeof email === 'string' ? email.trim() : '';
+  const normalizedSessionId = typeof tempSessionId === 'string' ? tempSessionId.trim() : '';
+
+  let existingUser: SupabaseUserRow | null = null;
+
+  if (normalizedEmail) {
+    const { data } = await supabase
       .from(prefixedTable('users'))
       .select('*')
-      .eq('email', email)
+      .eq('email', normalizedEmail)
       .single();
-    
-    if (existingUser) {
-      console.log("Existing user found with email:", email);
-      storage.setUserId(existingUser.id);
+
+    if (data) {
+      existingUser = data;
       isExistingUser = true;
-      // Return existing user without creating new record
-      return { data: existingUser, error: null, isExistingUser };
     }
   }
 
-   // If tempSessionId is provided, check if user already exists
-  if (tempSessionId) {
-    const { data: existingUser } = await supabase
+  if (!existingUser && userId) {
+    const { data } = await supabase
       .from(prefixedTable('users'))
       .select('*')
-      .eq('temp_session_id', tempSessionId)
+      .eq('id', userId)
       .single();
-    
-    if (existingUser) {
-      console.log("Existing user found with tempSessionId:", tempSessionId);
-      storage.setUserId(existingUser.id);
+
+    if (data) {
+      existingUser = data;
       isExistingUser = true;
-      // Return existing user without creating new record
-      return { data: existingUser, error: null, isExistingUser };
     }
   }
-  
-  console.log("No existing user found. Creating new user.");
+
+  if (!existingUser && normalizedSessionId) {
+    const { data } = await supabase
+      .from(prefixedTable('users'))
+      .select('*')
+      .eq('temp_session_id', normalizedSessionId)
+      .single();
+
+    if (data) {
+      existingUser = data;
+      isExistingUser = true;
+    }
+  }
+
+  if (!existingUser && !normalizedEmail) {
+    return {
+      data: null,
+      error: new Error('Email is required to create a new user.'),
+      isExistingUser: false,
+    };
+  }
+
   const upsertData: Record<string, unknown> = {};
-  if (email) upsertData.email = email;
-  if (userId) upsertData.id = userId;
-  if (name) upsertData.name = name;
-  if (tempSessionId) upsertData.temp_session_id = tempSessionId;
-  if (cuddleId) upsertData.cuddle_id = cuddleId;
-  if (cuddleName) upsertData.cuddle_name = cuddleName;
+
+  const targetId = existingUser?.id ?? userId;
+  if (targetId) {
+    upsertData.id = targetId;
+  }
+
+  if (normalizedEmail) {
+    upsertData.email = normalizedEmail;
+  }
+
+  if (name) {
+    upsertData.name = name;
+  }
+
+  if (normalizedSessionId) {
+    upsertData.temp_session_id = normalizedSessionId;
+  }
+
+  if (cuddleId) {
+    upsertData.cuddle_id = cuddleId;
+  }
+
+  if (cuddleName) {
+    upsertData.cuddle_name = cuddleName;
+  }
 
   const mergedProfile: UpsertUserProfileFields = {
     cuddleOwnership: profile?.cuddleOwnership ?? cuddleOwnership,
@@ -141,17 +187,27 @@ export async function upsertUser({
     upsertData.life_stage = mergedProfile.lifeStage;
   }
 
+  if (Object.keys(upsertData).length === 0) {
+    return {
+      data: existingUser,
+      error: null,
+      isExistingUser,
+    };
+  }
+
   const { data, error } = await supabase
     .from(prefixedTable('users'))
     .upsert([upsertData])
     .select()
     .single();
 
-  if (data) {
-    console.log('Created new user:', data.id);
-    storage.setUserId(data.id);
+  const resolvedUser = data ?? existingUser ?? null;
+
+  if (resolvedUser?.id) {
+    storage.setUserId(resolvedUser.id);
   }
-  return { data, error, isExistingUser };
+
+  return { data: resolvedUser, error, isExistingUser };
 }
 
 export async function fetchUserById(id: string) {

@@ -1,10 +1,13 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
 import BaseModal from '@/components/BaseModal';
 import { upsertUser } from '@/lib/utils/journalDb';
 import { storage } from '@/lib/storage';
+
+const EMAIL_DEBOUNCE_MS = 400;
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 export default function GlobalAccessModal() {
   // ...existing code...
@@ -17,6 +20,31 @@ export default function GlobalAccessModal() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasAnnouncedAccess, setHasAnnouncedAccess] = useState(false);
+  const persistEmail = useCallback(async (rawEmail: string) => {
+    const normalizedEmail = rawEmail.trim();
+
+    if (!normalizedEmail) {
+      return { data: null, error: new Error('Email is required.'), isExistingUser: false };
+    }
+
+    if (!isValidEmail(normalizedEmail)) {
+      return { data: null, error: new Error('Please enter a valid email address.'), isExistingUser: false };
+    }
+
+    let tempSessionId = storage.getSessionId();
+    if (!tempSessionId) {
+      tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      storage.setSessionId(tempSessionId);
+    }
+
+    const result = await upsertUser({ tempSessionId, email: normalizedEmail, name: 'Username' });
+
+    if (!result.error && result.data) {
+      storage.setEmail(normalizedEmail);
+    }
+
+    return result;
+  }, []);
 
   useEffect(() => {
     // Only show modal if no email in localStorage
@@ -33,35 +61,58 @@ export default function GlobalAccessModal() {
     setIsOpen(false);
   }, []);
 
+  useEffect(() => {
+    if (!email) {
+      return;
+    }
+
+    const normalizedEmail = email.trim();
+
+    if (!isValidEmail(normalizedEmail)) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      persistEmail(normalizedEmail).catch(err => {
+        console.error('Error auto-saving email:', err);
+      });
+    }, EMAIL_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [email, persistEmail]);
+
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-    
-    let tempSessionId = storage.getSessionId();
-    if (!tempSessionId) {
-      tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      storage.setSessionId(tempSessionId);
-    }
-    const name = 'Username';
-    try { 
-      const { data: newUser, error: createError, isExistingUser } = await upsertUser({ tempSessionId, email, name });
+
+    try {
+      const { data: newUser, error: createError, isExistingUser } = await persistEmail(email);
       setIsLoading(false);
       if (createError) {
         console.error('Error creating user in GlobalAccessModal:', createError);
-        setError('We couldn’t create your account. This may be a network issue or a problem with your email.');
+        const fallbackError = 'We couldn’t create your account. This may be a network issue or a problem with your email.';
+        if (createError instanceof Error) {
+          setError(createError.message || fallbackError);
+        } else if (typeof createError === 'object' && createError && 'message' in createError) {
+          const message = (createError as { message?: string }).message;
+          setError(typeof message === 'string' && message ? message : fallbackError);
+        } else {
+          setError(fallbackError);
+        }
         // Optionally, provide more context or actions
         return;
       }
-      if (newUser && newUser.id) {
-        storage.setEmail(email);
-        
-        // If user already exists, skip code step and go directly to success
-        if (isExistingUser) {
-          setStep('success');
-        } else {
-          setStep('code');
-        }
+      if (!newUser) {
+        setError('We couldn’t create your account. This may be a network issue or a problem with your email.');
+        return;
+      }
+
+      // If user already exists, skip code step and go directly to success
+      if (isExistingUser) {
+        setStep('success');
+      } else {
+        setStep('code');
       }
     } catch (err) {
       setIsLoading(false);
@@ -74,8 +125,20 @@ export default function GlobalAccessModal() {
     e.preventDefault();
     setError('');
     if (code.trim().toUpperCase() === 'JOURNAL21') {
-      storage.setEmail(email);
-      await upsertUser({ email });
+      const { error: persistError } = await persistEmail(email);
+      if (persistError) {
+        console.error('Error saving email during code submit:', persistError);
+        const fallbackError = 'We couldn’t confirm your access. Please try again.';
+        if (persistError instanceof Error) {
+          setError(persistError.message || fallbackError);
+        } else if (typeof persistError === 'object' && persistError && 'message' in persistError) {
+          const message = (persistError as { message?: string }).message;
+          setError(typeof message === 'string' && message ? message : fallbackError);
+        } else {
+          setError(fallbackError);
+        }
+        return;
+      }
       setStep('success');
       setManuallyClosed(false);
     } else {
@@ -202,7 +265,7 @@ export default function GlobalAccessModal() {
               <h3 className="text-2xl font-bold text-primary-700 mb-2">Welcome to Whispr by Soul</h3>
               <p className="text-primary-700 mb-2">You now have exclusive access to a calm space that is just yours 🫶🏼</p>
               
-              <p className="text-primary-800 font-semibold">Let's get started 🚀</p>
+              <p className="text-primary-800 font-semibold">Let&apos;s get started 🚀</p>
             </div>
           </motion.div>
         )}

@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { prefixedTable, supabase } from '@/lib/supabase';
 import type { CuddleId } from '@/types/api';
 import StreakModal from '@/components/StreakModal';
 import PrivacyModal from '@/components/PrivacyModal';
@@ -12,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import axios from 'axios';
 import { event as gaEvent } from '@/lib/utils/gtag';
-import { upsertUser } from '@/lib/utils/journalDb';
+import { fetchUserById, fetchUserByTempSessionId } from '@/lib/utils/journalDb';
 import { storage } from '@/lib/storage';
 import { useChatPersistence } from '@/hooks/useChatPersistence';
 import { completeJournalEntry } from '@/lib/api/journal';
@@ -30,6 +29,15 @@ interface UserProfile {
   gender?: string;
   lifeStage?: string;
   lifestage?: string;
+}
+
+interface UserRecordFromDb {
+  id: string;
+  name?: string | null;
+  cuddle_ownership?: string | null;
+  gender?: string | null;
+  life_stage?: string | null;
+  lifestage?: string | null;
 }
 
 const isProfileComplete = (profile: UserProfile | null | undefined): boolean => {
@@ -122,6 +130,36 @@ function JournalContent() {
     setShowPrivacyModal(!isProfileComplete(storedProfile));
   }, []);
 
+  const applyUserRecord = useCallback((record: UserRecordFromDb | null | undefined) => {
+    if (!record) {
+      return false;
+    }
+
+    setUserId(record.id);
+    storage.setUserId(record.id);
+
+    const nextName = typeof record.name === 'string' && record.name.trim().length > 0 ? record.name : 'Username';
+    setUserName(nextName);
+
+    const profileFromDb = {
+      cuddleOwnership: typeof record.cuddle_ownership === 'string' ? record.cuddle_ownership : '',
+      gender: typeof record.gender === 'string' ? record.gender : '',
+      lifeStage:
+        typeof record.life_stage === 'string'
+          ? record.life_stage
+          : typeof record.lifestage === 'string'
+            ? record.lifestage
+            : '',
+    };
+
+    if (profileFromDb.cuddleOwnership || profileFromDb.gender || profileFromDb.lifeStage) {
+      storage.setUserProfile(profileFromDb);
+      evaluatePrivacyRequirements();
+    }
+
+    return true;
+  }, [evaluatePrivacyRequirements]);
+
   const getChatHistory = useCallback(async (dateOverride?: string) => {
     const storedUserId = storage.getUserId();
 
@@ -195,53 +233,30 @@ function JournalContent() {
         if (storedUserId) {
           setUserId(storedUserId);
 
-          // Check if user has a custom name
-          const { data } = await supabase
-            .from(prefixedTable('users'))
-            .select('name, cuddle_ownership, gender, life_stage, lifestage')
-            .eq('id', storedUserId)
-            .single();
-
-          setUserName(data?.name || 'Username');
-          if (data) {
-            const profileFromDb = {
-              cuddleOwnership: typeof data.cuddle_ownership === 'string' ? data.cuddle_ownership : '',
-              gender: typeof data.gender === 'string' ? data.gender : '',
-              lifeStage: typeof data.life_stage === 'string'
-                ? data.life_stage
-                : typeof data.lifestage === 'string'
-                  ? data.lifestage
-                  : '',
-            };
-
-            if (profileFromDb.cuddleOwnership || profileFromDb.gender || profileFromDb.lifeStage) {
-              storage.setUserProfile(profileFromDb);
-              evaluatePrivacyRequirements();
-            }
+          const { data, error } = await fetchUserById(storedUserId);
+          if (error && error.code !== 'PGRST116') {
+            console.error('Error fetching stored user:', error);
+            return;
           }
+
+          applyUserRecord((data ?? null) as UserRecordFromDb | null);
           return;
         }
 
-        // Create new user without setting a name
-        const tempSessionId = sessionId ?? `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const { data: user, error: createError } = await upsertUser({ tempSessionId });
-        if (createError) {
-          console.error('Error creating user:', createError);
+        const { data, error } = await fetchUserByTempSessionId(sessionId);
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error fetching user by session:', error);
           return;
         }
-        if (user) {
-          const newUserId = user.id;
 
-          setUserId(newUserId);
-          setUserName('Username');
-        }
+        applyUserRecord((data ?? null) as UserRecordFromDb | null);
       } catch (error) {
         console.error('Error in initializeUser:', error);
       }
     };
 
     initializeUser();
-  }, [evaluatePrivacyRequirements]);
+  }, [applyUserRecord]);
 
   // Load userId and selectedCuddle from localStorage on mount
   useEffect(() => {
