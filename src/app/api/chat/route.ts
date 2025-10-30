@@ -22,6 +22,17 @@ export const POST = withRateLimit('chat', withErrorHandler(async (request: Reque
   }
   const { messages, userId, cuddleId, date } = validatedData;
 
+  const hasUserMessage = Array.isArray(messages)
+    && messages.some(message =>
+      message?.role === 'user'
+      && typeof message?.content === 'string'
+      && message.content.trim().length > 0
+    );
+
+  if (!hasUserMessage) {
+    return NextResponse.json({ success: true, data: null });
+  }
+
   const { data, error } = await saveChatMessage({
     messages,
     userId,

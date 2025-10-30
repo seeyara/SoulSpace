@@ -75,7 +75,9 @@ export function useChatPersistence({
       }))
       .filter(message => message.content.trim().length > 0);
 
-    if (sanitizedMessages.length === 0) {
+    const hasUserMessage = sanitizedMessages.some(message => message.role === 'user');
+
+    if (sanitizedMessages.length === 0 || !hasUserMessage) {
       return true;
     }
 
@@ -116,8 +118,15 @@ export function useChatPersistence({
       }
 
       const shouldStore = options?.saveToStorage ?? storageEnabled;
+      const hasUserMessage = effectiveMessages.some(
+        message =>
+          message.role === 'user' &&
+          typeof message.content === 'string' &&
+          message.content.trim().length > 0
+      );
+
       if (shouldStore) {
-        if (effectiveMessages.length > 0) {
+        if (hasUserMessage) {
           storage.setOngoingConversation({
             messages: effectiveMessages,
             cuddle: contextRef.current.cuddleId
@@ -130,6 +139,10 @@ export function useChatPersistence({
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
+      }
+
+      if (!hasUserMessage) {
+        return Promise.resolve(true);
       }
 
       if (options?.immediate) {
