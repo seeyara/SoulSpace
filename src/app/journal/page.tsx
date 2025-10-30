@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { prefixedTable, supabase } from '@/lib/supabase';
@@ -85,6 +85,51 @@ function JournalContent() {
   });
 
   const hasHydratedMessagesRef = useRef(false);
+
+  const getChatHistory = useCallback(async (dateOverride?: string) => {
+    const storedUserId = storage.getUserId();
+
+    if (!storedUserId) {
+      return false;
+    }
+
+    const dateToUse = dateOverride ?? selectedDate;
+
+    try {
+      const response = await fetch(`/api/chat?userId=${storedUserId}&date=${dateToUse}`);
+      if (!response.ok) {
+        console.error('Failed to fetch chat history:', response.statusText);
+        return false;
+      }
+
+      const { data } = await response.json();
+
+      if (data?.messages?.length && data.mode === 'guided') {
+        if (isValidCuddleId(data.cuddleId) && data.cuddleId !== selectedCuddle) {
+          setSelectedCuddle(data.cuddleId);
+          storage.setCuddleId(data.cuddleId);
+        }
+
+        const messagesWithWelcome = [
+          ...data.messages,
+          { role: 'assistant' as const, content: WELCOME_BACK_MESSAGE }
+        ];
+
+        setMessages(messagesWithWelcome);
+        setIsTyping(false);
+        setIsContinuingEntry(true);
+        setHasMoreMessages(Boolean(data.hasMore));
+        setPage(1);
+        setShowInput(false);
+        setHasLoadedGuidedEntry(true);
+        return true;
+      }
+    } catch (error) {
+      console.error('Error fetching chat history:', error);
+    }
+
+    return false;
+  }, [selectedCuddle, selectedDate]);
 
   useEffect(() => {
     if (!hasHydratedMessagesRef.current) {
@@ -214,37 +259,21 @@ function JournalContent() {
       return;
     }
 
-    const fetchExistingEntry = async () => {
-      const storedUserId = storage.getUserId();
-      if (!storedUserId) {
+    let isCancelled = false;
+
+    const hydrateGuidedConversation = async () => {
+      const foundExistingEntry = await getChatHistory();
+
+      if (isCancelled || foundExistingEntry) {
         return;
-      }
-
-      try {
-        const response = await fetch(`/api/chat?userId=${storedUserId}&date=${selectedDate}&page=1`);
-        const { data } = await response.json();
-
-        if (data?.messages && data.messages.length > 0 && data.mode === 'guided') {
-          const messagesWithWelcome = [
-            ...data.messages,
-            { role: 'assistant' as const, content: WELCOME_BACK_MESSAGE }
-          ];
-
-          setMessages(messagesWithWelcome);
-          setIsTyping(false);
-          setIsContinuingEntry(true);
-          setHasMoreMessages(data.hasMore);
-          setPage(1);
-          setShowInput(false);
-          setHasLoadedGuidedEntry(true);
-          return;
-        }
-      } catch (error) {
-        console.error('Error fetching chat history:', error);
       }
 
       setIsTyping(true);
       setTimeout(() => {
+        if (isCancelled) {
+          return;
+        }
+
         setMessages([
           {
             role: 'assistant',
@@ -259,12 +288,18 @@ function JournalContent() {
         setIsContinuingEntry(false);
         setShowInput(true);
         setHasLoadedGuidedEntry(false);
+        setHasMoreMessages(false);
+        setPage(1);
         console.log('Started new user flow');
       }, 1000);
     };
 
-    fetchExistingEntry();
-  }, [selectedCuddle, selectedDate, showPrivacyModal, messages.length, hasGlobalAccess]);
+    hydrateGuidedConversation();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedCuddle, showPrivacyModal, messages.length, hasGlobalAccess, getChatHistory]);
 
   useEffect(() => {
     // Load ongoing conversation from localStorage if exists
