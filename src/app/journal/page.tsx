@@ -10,7 +10,7 @@ import type { CuddleId } from '@/types/api';
 import StreakModal from '@/components/StreakModal';
 import PrivacyModal from '@/components/PrivacyModal';
 import { useRouter } from 'next/navigation';
-import { format, isToday, set } from 'date-fns';
+import { format } from 'date-fns';
 import axios from 'axios';
 import { event as gaEvent } from '@/lib/utils/gtag';
 import { upsertUser } from '@/lib/utils/journalDb';
@@ -21,9 +21,7 @@ import { useChatPersistence } from '@/hooks/useChatPersistence';
 import { completeJournalEntry } from '@/lib/api/journal';
 
 // Import mode toggle components
-import { JournalModeRadioToggle } from '@/components/JournalModeToggle';
 import { JournalSuccessModal } from '@/components/JournalSuccessModal';
-import BaseModal from '@/components/BaseModal';
 import TypingIndicator from '@/components/TypingIndicator';
 
 // Journal mode type
@@ -91,13 +89,12 @@ function JournalContent() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [journalingMode, setJournalingMode] = useState<'guided' | 'free-form' | null>(null);
   const [freeFormContent, setFreeFormContent] = useState('');
-  const [showSuggestedReplies, setShowSuggestedReplies] = useState(false);
+  const [, setShowSuggestedReplies] = useState(false);
   const [lastUnfinishedEntry, setLastUnfinishedEntry] = useState<null | { mode: 'guided' | 'free-form', content: string }>(null);
 
   // New dual-mode state
-  const [journalMode, setJournalMode] = useState<JournalMode>('flat');
+  const [journalMode, setJournalMode] = useState<JournalMode>('guided');
   const [loadedEntryMode, setLoadedEntryMode] = useState<JournalMode | null>(null);
-  const [showGuidedDisclaimer, setShowGuidedDisclaimer] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [flatJournalContent, setFlatJournalContent] = useState('');
   const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
@@ -114,25 +111,6 @@ function JournalContent() {
   });
 
   // Handle mode change
-  const handleModeChange = (mode: JournalMode) => {
-    if (mode === journalMode) {
-      return;
-    }
-
-    if (mode === 'guided' && journalMode === 'flat') {
-      setShowGuidedDisclaimer(true);
-      return;
-    }
-
-    setJournalMode(mode);
-    localStorage.setItem('journal-mode', mode);
-    storage.clearOngoingConversation();
-
-    if (mode === 'flat') {
-      initializeFlatMode();
-    }
-  };
-
   // Initialize flat mode
   const initializeFlatMode = () => {
     // Check if already submitted today
@@ -414,6 +392,8 @@ function JournalContent() {
           const entryMode: JournalMode = data.mode === 'flat' ? 'flat' : 'guided';
           setLoadedEntryMode(entryMode);
           setIsContinuingEntry(true);
+          setJournalMode(entryMode);
+          localStorage.setItem('journal-mode', entryMode);
           setHasMoreMessages(data.hasMore);
           setPage(1);
           setIsTyping(false);
@@ -913,14 +893,21 @@ function JournalContent() {
 
   // Load saved mode preference and initialize mode
   useEffect(() => {
-    const savedMode = localStorage.getItem('journal-mode') as JournalMode;
-    if (savedMode && ['flat', 'guided'].includes(savedMode)) {
-      setJournalMode(savedMode);
+    const savedMode = localStorage.getItem('journal-mode') as JournalMode | null;
+
+    if (savedMode === 'flat') {
+      setJournalMode('flat');
+
+      if (userId && !isContinuingEntry) {
+        initializeFlatMode();
+      }
+
+      return;
     }
 
-    // Initialize flat mode if selected
-    if (userId && (savedMode === 'flat' || journalMode === 'flat') && !isContinuingEntry) {
-      initializeFlatMode();
+    if (!isContinuingEntry) {
+      setJournalMode('guided');
+      localStorage.setItem('journal-mode', 'guided');
     }
   }, [userId, isContinuingEntry]);
 
@@ -970,11 +957,16 @@ function JournalContent() {
             onClick={() => router.push('/')}
           />
           <div className="flex items-center gap-4">
-            <JournalModeRadioToggle
-              mode={journalMode}
-              onModeChange={handleModeChange}
-              disabled={isTyping}
-            />
+            <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-lg">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  journalMode === 'guided' ? 'bg-purple-500' : 'bg-gray-400'
+                }`}
+              />
+              <span className="text-sm font-medium text-gray-600">
+                {journalMode === 'guided' ? 'Guided journaling' : 'Free-form journaling'}
+              </span>
+            </div>
           </div>
         </div>
       </header>
@@ -1410,57 +1402,6 @@ function JournalContent() {
       />
 
       {/* Guided Mode Disclaimer Modal */}
-      <BaseModal
-        isOpen={showGuidedDisclaimer}
-        onClose={() => setShowGuidedDisclaimer(false)}
-        maxWidth="max-w-md"
-      >
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-6 rounded-full overflow-hidden">
-            <Image
-              src={getCuddleImage(selectedCuddle)}
-              alt={getDisplayCuddleName(selectedCuddle)}
-              width={64}
-              height={64}
-              className="w-full h-full object-cover"
-            />
-          </div>
-
-          <h3 className="text-xl font-semibold text-gray-900 mb-4">
-            Switch to Guided Journaling?
-          </h3>
-
-          <div className="bg-secondary border border-primary/10 rounded-lg p-4 mb-4">
-            <p className="text-sm">
-              Guided Journalling is experimental and uses GPT to guide reflection.
-              <br />For medical advice, please seek professional help.
-            </p>
-          </div>
-
-          <div className="flex flex-col space-y-3">
-            <button
-              onClick={() => {
-                storage.clearOngoingConversation();
-                setJournalMode('guided');
-                localStorage.setItem('journal-mode', 'guided');
-                setShowGuidedDisclaimer(false);
-                setJournalingMode('guided');
-                setShowInput(true);
-              }}
-              className="w-full px-4 py-3 text-sm font-medium text-white bg-primary border border-transparent rounded-lg hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 transition-colors duration-200"
-            >
-              Okay, got it
-            </button>
-            <button
-              onClick={() => setShowGuidedDisclaimer(false)}
-              className="w-full px-4 py-3 text-sm font-medium text-primary bg-secondary border border-primary/10 rounded-lg hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 transition-colors duration-200"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </BaseModal>
-
       {/* Error Message */}
       <AnimatePresence>
         {errorMessage && (

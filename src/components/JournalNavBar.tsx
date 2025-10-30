@@ -3,55 +3,50 @@
 import React, { memo } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
-import { JournalModeRadioToggle, type JournalMode } from './JournalModeToggle';
-import type { CuddleId } from '@/types/api';
+import type { JournalMode } from './JournalModeToggle';
 
 interface JournalNavBarProps {
-  cuddleId: CuddleId;
   cuddleName: string;
   cuddleImage: string;
   userName: string;
   selectedDate: string;
   journalMode: JournalMode;
-  onModeChange: (mode: JournalMode) => void;
   onBack?: () => void;
   className?: string;
 }
 
+const formatJournalDate = (dateString: string) => {
+  try {
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return 'Today';
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
+      });
+    }
+  } catch {
+    return dateString;
+  }
+};
+
 export const JournalNavBar = memo(function JournalNavBar({
-  cuddleId,
   cuddleName,
   cuddleImage,
   userName,
   selectedDate,
   journalMode,
-  onModeChange,
   onBack,
   className = ''
 }: JournalNavBarProps) {
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-
-      if (date.toDateString() === today.toDateString()) {
-        return 'Today';
-      } else if (date.toDateString() === yesterday.toDateString()) {
-        return 'Yesterday';
-      } else {
-        return date.toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric',
-          year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
-        });
-      }
-    } catch {
-      return dateString;
-    }
-  };
-
   return (
     <div className={`bg-white border-b border-gray-200 ${className}`}>
       <div className="px-4 py-3">
@@ -75,18 +70,23 @@ export const JournalNavBar = memo(function JournalNavBar({
                 Journal
               </h1>
               <p className="text-sm text-gray-500">
-                {formatDate(selectedDate)}
+                {formatJournalDate(selectedDate)}
               </p>
             </div>
           </div>
 
-          {/* Center section - Mode toggle (replaces cuddle name in guided mode) */}
+          {/* Center section - Mode indicator */}
           <div className="flex-1 flex justify-center">
-            <JournalModeRadioToggle
-              mode={journalMode}
-              onModeChange={onModeChange}
-              className="bg-gray-50 px-4 py-2 rounded-lg"
-            />
+            <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-lg">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  journalMode === 'guided' ? 'bg-purple-500' : 'bg-gray-400'
+                }`}
+              />
+              <span className="text-sm font-medium text-gray-600">
+                {journalMode === 'guided' ? `Guided journaling with ${cuddleName}` : 'Free-form journaling'}
+              </span>
+            </div>
           </div>
 
           {/* Right section - User info and cuddle */}
@@ -147,13 +147,11 @@ export const JournalNavBar = memo(function JournalNavBar({
 
 // Simplified version for mobile
 export const MobileJournalNavBar = memo(function MobileJournalNavBar({
-  cuddleId,
   cuddleName,
   cuddleImage,
   userName,
   selectedDate,
   journalMode,
-  onModeChange,
   onBack,
   className = ''
 }: JournalNavBarProps) {
@@ -177,6 +175,7 @@ export const MobileJournalNavBar = memo(function MobileJournalNavBar({
             
             <div>
               <h1 className="text-lg font-semibold text-gray-900">Journal</h1>
+              <p className="text-xs text-gray-500">{formatJournalDate(selectedDate)}</p>
             </div>
           </div>
 
@@ -194,13 +193,18 @@ export const MobileJournalNavBar = memo(function MobileJournalNavBar({
           </div>
         </div>
 
-        {/* Bottom row - Mode toggle */}
+        {/* Bottom row - Mode indicator */}
         <div className="flex justify-center">
-          <JournalModeRadioToggle
-            mode={journalMode}
-            onModeChange={onModeChange}
-            className="bg-gray-50 px-3 py-2 rounded-lg"
-          />
+          <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                journalMode === 'guided' ? 'bg-purple-500' : 'bg-gray-400'
+              }`}
+            />
+            <span className="text-xs font-medium text-gray-600">
+              {journalMode === 'guided' ? `Guided with ${cuddleName}` : 'Free-form journaling'}
+            </span>
+          </div>
         </div>
       </div>
     </div>
