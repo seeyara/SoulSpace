@@ -16,16 +16,21 @@ export default function GlobalAccessModal() {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [hasAnnouncedAccess, setHasAnnouncedAccess] = useState(false);
 
   useEffect(() => {
     // Only show modal if no email in localStorage
     const storedEmail = storage.getEmail();
     if (!storedEmail) {
       setIsOpen(true);
-    } else {
-      // Optionally, verify with supabase if needed
-      setIsOpen(false);
+      return;
     }
+
+    // If the user already has access from a previous visit, make sure other
+    // parts of the app know about it so they can gate follow-up modals
+    window.dispatchEvent(new CustomEvent('soul:global-access-granted'));
+    setHasAnnouncedAccess(true);
+    setIsOpen(false);
   }, []);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
@@ -77,6 +82,15 @@ export default function GlobalAccessModal() {
       setError('Invalid code. Please check your email and try again.');
     }
   };
+
+  useEffect(() => {
+    if (step !== 'success' || hasAnnouncedAccess) {
+      return;
+    }
+
+    window.dispatchEvent(new CustomEvent('soul:global-access-granted'));
+    setHasAnnouncedAccess(true);
+  }, [step, hasAnnouncedAccess]);
 
   // Auto-close success modal after 10 seconds unless manually closed
   useEffect(() => {

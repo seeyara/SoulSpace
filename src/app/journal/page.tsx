@@ -59,6 +59,12 @@ function JournalContent() {
   const [showInput, setShowInput] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [hasGlobalAccess, setHasGlobalAccess] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    return Boolean(storage.getEmail());
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isContinuingEntry, setIsContinuingEntry] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -126,8 +132,6 @@ function JournalContent() {
 
           setUserId(newUserId);
           setUserName('Username');
-          // Show privacy modal for new users
-          setShowPrivacyModal(true);
         }
       } catch (error) {
         console.error('Error in initializeUser:', error);
@@ -186,9 +190,27 @@ function JournalContent() {
     console.log('showPrivacyModal changed:', showPrivacyModal);
   }, [showPrivacyModal]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleGlobalAccess = () => {
+      setHasGlobalAccess(Boolean(storage.getEmail()));
+    };
+
+    handleGlobalAccess();
+
+    window.addEventListener('soul:global-access-granted', handleGlobalAccess);
+
+    return () => {
+      window.removeEventListener('soul:global-access-granted', handleGlobalAccess);
+    };
+  }, []);
+
   // Main chat history fetch effect with logging
   useEffect(() => {
-    if (showPrivacyModal || messages.length > 0) {
+    if (!hasGlobalAccess || showPrivacyModal || messages.length > 0) {
       return;
     }
 
@@ -242,7 +264,7 @@ function JournalContent() {
     };
 
     fetchExistingEntry();
-  }, [selectedCuddle, selectedDate, showPrivacyModal, messages.length]);
+  }, [selectedCuddle, selectedDate, showPrivacyModal, messages.length, hasGlobalAccess]);
 
   useEffect(() => {
     // Load ongoing conversation from localStorage if exists
@@ -526,21 +548,25 @@ function JournalContent() {
     };
   }, [flushBeforeUnload]);
 
-  // Show PrivacyModal until profile is complete
+  // Show PrivacyModal once global access is granted, until profile is complete
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const profileStr = localStorage.getItem('user_profile');
-      let profile = null;
-      try {
-        profile = profileStr ? JSON.parse(profileStr) : null;
-      } catch { }
-      if (!isProfileComplete(profile)) {
-        setShowPrivacyModal(true);
-      } else {
-        setShowPrivacyModal(false);
-      }
+    if (!hasGlobalAccess) {
+      setShowPrivacyModal(false);
+      return;
     }
-  }, []);
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const profileStr = localStorage.getItem('user_profile');
+    let profile = null;
+    try {
+      profile = profileStr ? JSON.parse(profileStr) : null;
+    } catch { }
+
+    setShowPrivacyModal(!isProfileComplete(profile));
+  }, [hasGlobalAccess]);
 
   // When PrivacyModal closes, re-check profile completeness
   const handlePrivacyModalClose = () => {
