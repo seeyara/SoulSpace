@@ -117,6 +117,11 @@ function JournalContent() {
 
   const hasHydratedMessagesRef = useRef(false);
 
+  const evaluatePrivacyRequirements = useCallback(() => {
+    const storedProfile = readStoredProfile();
+    setShowPrivacyModal(!isProfileComplete(storedProfile));
+  }, []);
+
   const getChatHistory = useCallback(async (dateOverride?: string) => {
     const storedUserId = storage.getUserId();
 
@@ -251,24 +256,35 @@ function JournalContent() {
     setIsInitialLoad(false);
   }, [messages, isInitialLoad]);
 
-  // Add logging for key state changes
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
 
-    const handleGlobalAccess = () => {
-      setHasGlobalAccess(Boolean(storage.getEmail()));
+    const updateAccessAndPrivacy = () => {
+      const hasEmail = Boolean(storage.getEmail());
+      setHasGlobalAccess(hasEmail);
+
+      if (hasEmail) {
+        evaluatePrivacyRequirements();
+        setHasEvaluatedPrivacy(true);
+      } else {
+        setHasEvaluatedPrivacy(false);
+      }
     };
 
-    handleGlobalAccess();
+    updateAccessAndPrivacy();
 
-    window.addEventListener('soul:global-access-granted', handleGlobalAccess);
+    window.addEventListener('soul:global-access-granted', updateAccessAndPrivacy);
 
     return () => {
-      window.removeEventListener('soul:global-access-granted', handleGlobalAccess);
+      window.removeEventListener('soul:global-access-granted', updateAccessAndPrivacy);
     };
-  }, []);
+  }, [evaluatePrivacyRequirements]);
+
+  useEffect(() => {
+    evaluatePrivacyRequirements();
+  }, [evaluatePrivacyRequirements]);
 
   // Main chat history fetch effect with logging
   useEffect(() => {
@@ -597,30 +613,13 @@ function JournalContent() {
     };
   }, [flushBeforeUnload]);
 
-  // Show PrivacyModal once global access is granted, until profile is complete
-  useEffect(() => {
-    if (!hasGlobalAccess) {
-      setShowPrivacyModal(false);
-      setHasEvaluatedPrivacy(false);
-      return;
-    }
-
-    const storedProfile = readStoredProfile();
-    setShowPrivacyModal(!isProfileComplete(storedProfile));
-    setHasEvaluatedPrivacy(true);
-  }, [hasGlobalAccess]);
-
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
 
     const handleProfileUpdate = () => {
-      const storedProfile = readStoredProfile();
-      setShowPrivacyModal(!isProfileComplete(storedProfile));
-      if (hasGlobalAccess) {
-        setHasEvaluatedPrivacy(true);
-      }
+      evaluatePrivacyRequirements();
     };
 
     window.addEventListener('soul:profile-updated', handleProfileUpdate);
@@ -628,7 +627,7 @@ function JournalContent() {
     return () => {
       window.removeEventListener('soul:profile-updated', handleProfileUpdate);
     };
-  }, [hasGlobalAccess]);
+  }, [evaluatePrivacyRequirements]);
 
   // When PrivacyModal closes, re-check profile completeness
   const handlePrivacyModalClose = () => {
@@ -852,7 +851,7 @@ function JournalContent() {
       />
 
       <PrivacyModal
-        isOpen={showPrivacyModal}
+        isOpen={hasGlobalAccess && showPrivacyModal}
         onClose={handlePrivacyModalClose}
       />
 
