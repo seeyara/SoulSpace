@@ -121,7 +121,6 @@ export interface SaveChatRequest {
   messages: ChatMessage[];
   userId: string;
   cuddleId: CuddleId;
-  mode?: 'guided' | 'flat';
 }
 
 export interface GetChatRequest {

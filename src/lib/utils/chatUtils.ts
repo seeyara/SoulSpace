@@ -15,7 +15,6 @@ export interface SaveChatMessageParams {
   messages: ChatMessage[];
   userId: string;
   cuddleId: string;
-  mode: 'guided' | 'flat';
   date?: string;
 }
 
@@ -24,7 +23,7 @@ export interface ChatHistory {
   cuddleId: string;
   hasMore: boolean;
   totalCount?: number;
-  mode?: 'guided' | 'flat';
+  mode?: 'guided';
 }
 
 export interface PaginatedChatHistory {
@@ -32,7 +31,7 @@ export interface PaginatedChatHistory {
     date: string;
     messages: ChatMessage[];
     cuddleId: string;
-    mode?: 'guided' | 'flat';
+    mode?: 'guided';
   }>;
   hasMore: boolean;
   nextCursor?: string;
@@ -41,12 +40,12 @@ export interface PaginatedChatHistory {
 
 export interface UnfinishedEntry {
   lastUnfinished: {
-    mode: 'guided' | 'free-form';
+    mode: 'guided';
     content: string;
   };
 }
 
-export async function saveChatMessage({ messages, userId, cuddleId, mode: mode, date }: SaveChatMessageParams) {
+export async function saveChatMessage({ messages, userId, cuddleId, date }: SaveChatMessageParams) {
   const today = date ?? format(new Date(), 'yyyy-MM-dd');
 
   // Trim messages to prevent excessive storage
@@ -57,8 +56,8 @@ export async function saveChatMessage({ messages, userId, cuddleId, mode: mode, 
     user_id: userId,
     messages: trimmedMessages,
     cuddle_id: cuddleId,
-    updated_at: new Date().toISOString(), 
-    mode: mode
+    updated_at: new Date().toISOString(),
+    mode: 'guided'
   };
 
   console.log("persisting", payload);
@@ -85,13 +84,12 @@ export async function fetchUnfinishedEntry(userId: string): Promise<UnfinishedEn
       throw error;
     }
 
-    if (data?.messages && Array.isArray(data.messages) && data.messages.length > 0) {
+    if (data?.messages && Array.isArray(data.messages) && data.messages.length > 0 && data.mode === 'guided') {
       const lastMessage = data.messages[data.messages.length - 1];
       if (lastMessage?.role === 'user' && lastMessage?.content) {
-        const derivedMode = data.mode === 'flat' ? 'free-form' : 'guided';
         return {
           lastUnfinished: {
-            mode: derivedMode,
+            mode: 'guided',
             content: lastMessage.content
           }
         };
@@ -142,7 +140,7 @@ export async function fetchChatHistory(
         cuddleId: data.cuddle_id,
         hasMore: false,
         totalCount: Array.isArray(data.messages) ? data.messages.length : 0,
-        mode: data.mode as 'guided' | 'flat' | undefined,
+        mode: data.mode === 'guided' ? 'guided' : undefined,
       };
     }
 
@@ -181,7 +179,7 @@ export async function fetchPaginatedChatHistory(
     date: item.date,
     messages: item.messages || [],
     cuddleId: item.cuddle_id,
-    mode: item.mode as 'guided' | 'flat' | undefined
+    mode: item.mode === 'guided' ? 'guided' : undefined
   }));
 
   const hasMore = entries.length === limit;

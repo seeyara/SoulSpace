@@ -1,3 +1,8 @@
+import { supabase, prefixedTable } from '@/lib/supabase';
+import { format } from 'date-fns';
+import type { CuddleId } from '@/types/api';
+import { storage } from '../storage';
+
 // Fetch all chat entry dates for a user (for calendar/streak)
 export async function fetchUserChatDates(userId: string, dates: string[]) {
   const { data, error } = await supabase
@@ -6,23 +11,6 @@ export async function fetchUserChatDates(userId: string, dates: string[]) {
     .eq('user_id', userId)
     .in('date', dates);
   return { data, error };
-}
-import { supabase, prefixedTable } from '@/lib/supabase';
-import { format } from 'date-fns';
-import type { CuddleId } from '@/types/api';
-import { storage } from '../storage';
-
-export async function upsertFlatJournalEntry({ userId, cuddleId, content }: { userId: string, cuddleId: CuddleId, content: string }) {
-  const { error } = await supabase
-    .from(prefixedTable('chats'))
-    .insert({
-      user_id: userId,
-      cuddle_id: cuddleId,
-      messages: [{ role: 'user', content: content.trim() }],
-      date: format(new Date(), 'yyyy-MM-dd'),
-      mode: 'flat',
-    });
-  return { error };
 }
 
 export async function upsertGuidedJournalEntry({ userId, cuddleId, content }: { userId: string, cuddleId: CuddleId, content: string }) {

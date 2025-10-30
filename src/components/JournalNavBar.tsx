@@ -3,7 +3,6 @@
 import React, { memo } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
-import { JournalModeRadioToggle, type JournalMode } from './JournalModeToggle';
 import type { CuddleId } from '@/types/api';
 
 interface JournalNavBarProps {
@@ -12,20 +11,15 @@ interface JournalNavBarProps {
   cuddleImage: string;
   userName: string;
   selectedDate: string;
-  journalMode: JournalMode;
-  onModeChange: (mode: JournalMode) => void;
   onBack?: () => void;
   className?: string;
 }
 
 export const JournalNavBar = memo(function JournalNavBar({
-  cuddleId,
   cuddleName,
   cuddleImage,
   userName,
   selectedDate,
-  journalMode,
-  onModeChange,
   onBack,
   className = ''
 }: JournalNavBarProps) {
@@ -80,13 +74,16 @@ export const JournalNavBar = memo(function JournalNavBar({
             </div>
           </div>
 
-          {/* Center section - Mode toggle (replaces cuddle name in guided mode) */}
+          {/* Center section - Mode messaging */}
           <div className="flex-1 flex justify-center">
-            <JournalModeRadioToggle
-              mode={journalMode}
-              onModeChange={onModeChange}
-              className="bg-gray-50 px-4 py-2 rounded-lg"
-            />
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+              className="bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium text-gray-600"
+            >
+              Guided journaling with {cuddleName}
+            </motion.div>
           </div>
 
           {/* Right section - User info and cuddle */}
@@ -96,11 +93,10 @@ export const JournalNavBar = memo(function JournalNavBar({
               {userName}
             </span>
 
-            {/* Cuddle avatar - show when in flat mode or as secondary info */}
+            {/* Cuddle avatar */}
             <div className="relative">
               <div className={`
-                w-8 h-8 rounded-full overflow-hidden bg-purple-100 ring-2 transition-all duration-200
-                ${journalMode === 'guided' ? 'ring-purple-500' : 'ring-gray-200'}
+                w-8 h-8 rounded-full overflow-hidden bg-purple-100 ring-2 ring-purple-500 transition-all duration-200
               `}>
                 <Image
                   src={cuddleImage}
@@ -113,8 +109,7 @@ export const JournalNavBar = memo(function JournalNavBar({
               
               {/* Mode indicator dot */}
               <div className={`
-                absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white
-                ${journalMode === 'guided' ? 'bg-purple-500' : 'bg-gray-400'}
+                absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white bg-purple-500
               `} />
             </div>
           </div>
@@ -123,20 +118,14 @@ export const JournalNavBar = memo(function JournalNavBar({
         {/* Mode description */}
         <div className="mt-3 text-center">
           <motion.div
-            key={journalMode}
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
             className="inline-flex items-center space-x-2 px-3 py-1 bg-gray-50 rounded-full"
           >
-            <div className={`w-2 h-2 rounded-full ${
-              journalMode === 'guided' ? 'bg-purple-500' : 'bg-gray-400'
-            }`} />
+            <div className="w-2 h-2 rounded-full bg-purple-500" />
             <span className="text-xs font-medium text-gray-600">
-              {journalMode === 'guided' 
-                ? `Interactive journaling with ${cuddleName}`
-                : 'Free-form journaling'
-              }
+              {`Interactive journaling with ${cuddleName}`}
             </span>
           </motion.div>
         </div>
@@ -147,13 +136,9 @@ export const JournalNavBar = memo(function JournalNavBar({
 
 // Simplified version for mobile
 export const MobileJournalNavBar = memo(function MobileJournalNavBar({
-  cuddleId,
   cuddleName,
   cuddleImage,
   userName,
-  selectedDate,
-  journalMode,
-  onModeChange,
   onBack,
   className = ''
 }: JournalNavBarProps) {
@@ -194,13 +179,11 @@ export const MobileJournalNavBar = memo(function MobileJournalNavBar({
           </div>
         </div>
 
-        {/* Bottom row - Mode toggle */}
+        {/* Bottom row - Guided messaging */}
         <div className="flex justify-center">
-          <JournalModeRadioToggle
-            mode={journalMode}
-            onModeChange={onModeChange}
-            className="bg-gray-50 px-3 py-2 rounded-lg"
-          />
+          <div className="bg-gray-50 px-3 py-2 rounded-lg text-sm font-medium text-gray-600">
+            Guided journaling with {cuddleName}
+          </div>
         </div>
       </div>
     </div>

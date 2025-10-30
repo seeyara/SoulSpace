@@ -26,7 +26,6 @@ export const POST = withRateLimit('chat', withErrorHandler(async (request: Reque
     messages,
     userId,
     cuddleId,
-    mode: validatedData.mode ?? 'flat', // default to 'flat' if undefined
     date,
   });
 
@@ -37,6 +36,7 @@ export const POST = withRateLimit('chat', withErrorHandler(async (request: Reque
 
   return NextResponse.json({ success: true, data });
 }));
+
 
 // Get chat history with pagination
 export const GET = withRateLimit('chat', withErrorHandler(async (request: Request) => {
@@ -49,7 +49,6 @@ export const GET = withRateLimit('chat', withErrorHandler(async (request: Reques
     const unfinishedData = await fetchUnfinishedEntry(userId);
     return NextResponse.json({ data: unfinishedData || null });
   }
-
   const chatData = await fetchChatHistory(date!, userId);
   return NextResponse.json({ data: chatData || null });
-})); 
+}));
