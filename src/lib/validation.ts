@@ -14,7 +14,8 @@ export const ChatCompletionRequestSchema = z.object({
     errorMap: () => ({ message: 'Invalid cuddle ID' })
   }),
   messageHistory: z.array(ChatMessageSchema).max(100, 'Message history too long'),
-  forceEnd: z.boolean().optional()
+  forceEnd: z.boolean().optional(),
+  userId: z.string().uuid('Invalid user ID format')
 }).refine(
   (data) => data.message || data.forceEnd || data.message === "_finish_entry_",
   {

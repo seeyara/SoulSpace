@@ -192,11 +192,27 @@ function JournalContent() {
           // Check if user has a custom name
           const { data } = await supabase
             .from(prefixedTable('users'))
-            .select('name')
+            .select('name, cuddle_ownership, gender, life_stage, lifestage')
             .eq('id', storedUserId)
             .single();
 
           setUserName(data?.name || 'Username');
+          if (data) {
+            const profileFromDb = {
+              cuddleOwnership: typeof data.cuddle_ownership === 'string' ? data.cuddle_ownership : '',
+              gender: typeof data.gender === 'string' ? data.gender : '',
+              lifeStage: typeof data.life_stage === 'string'
+                ? data.life_stage
+                : typeof data.lifestage === 'string'
+                  ? data.lifestage
+                  : '',
+            };
+
+            if (profileFromDb.cuddleOwnership || profileFromDb.gender || profileFromDb.lifeStage) {
+              storage.setUserProfile(profileFromDb);
+              evaluatePrivacyRequirements();
+            }
+          }
           return;
         }
 
@@ -219,7 +235,7 @@ function JournalContent() {
     };
 
     initializeUser();
-  }, []);
+  }, [evaluatePrivacyRequirements]);
 
   // Load userId and selectedCuddle from localStorage on mount
   useEffect(() => {
@@ -367,9 +383,6 @@ function JournalContent() {
     setIsTyping(true);
 
     try {
-      // Get user profile from localStorage
-      const userProfile = storage.getUserProfile();
-
       // For OpenAI, skip the first two assistant messages if present (but keep for display)
       let messageHistoryToSend = messages;
       if (messages.length > 2 && messages[0].role === 'assistant' && messages[1].role === 'assistant') {
@@ -381,12 +394,8 @@ function JournalContent() {
         response = await axios.post('/api/chat-completion', {
           message: userMessage.content,
           cuddleId: selectedCuddle,
-          messageHistory: messageHistoryToSend
-        }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-profile': userProfile ? JSON.stringify(userProfile) : ''
-          },
+          messageHistory: messageHistoryToSend,
+          userId: storedUserId,
         });
       } catch (error) {
         console.error('Error:', error);

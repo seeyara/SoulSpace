@@ -49,14 +49,37 @@ export async function fetchChatHistoryWithTempSessionId(tempSessionId: string, d
 }
 
 // USERS TABLE HELPERS
-export async function upsertUser({ userId, email, name, tempSessionId, cuddleId, cuddleName }: {
+interface UpsertUserProfileFields {
+  cuddleOwnership?: string;
+  gender?: string;
+  lifeStage?: string;
+}
+
+interface UpsertUserParams {
   email?: string;
   userId?: string;
   name?: string;
   tempSessionId?: string;
   cuddleId?: string;
   cuddleName?: string;
-}) {
+  profile?: UpsertUserProfileFields;
+  cuddleOwnership?: string;
+  gender?: string;
+  lifeStage?: string;
+}
+
+export async function upsertUser({
+  userId,
+  email,
+  name,
+  tempSessionId,
+  cuddleId,
+  cuddleName,
+  profile,
+  cuddleOwnership,
+  gender,
+  lifeStage,
+}: UpsertUserParams) {
   let isExistingUser = false;
   
   // If email is provided, check if user already exists
@@ -101,7 +124,23 @@ export async function upsertUser({ userId, email, name, tempSessionId, cuddleId,
   if (tempSessionId) upsertData.temp_session_id = tempSessionId;
   if (cuddleId) upsertData.cuddle_id = cuddleId;
   if (cuddleName) upsertData.cuddle_name = cuddleName;
-  
+
+  const mergedProfile: UpsertUserProfileFields = {
+    cuddleOwnership: profile?.cuddleOwnership ?? cuddleOwnership,
+    gender: profile?.gender ?? gender,
+    lifeStage: profile?.lifeStage ?? lifeStage,
+  };
+
+  if (mergedProfile.cuddleOwnership) {
+    upsertData.cuddle_ownership = mergedProfile.cuddleOwnership;
+  }
+  if (mergedProfile.gender) {
+    upsertData.gender = mergedProfile.gender;
+  }
+  if (mergedProfile.lifeStage) {
+    upsertData.life_stage = mergedProfile.lifeStage;
+  }
+
   const { data, error } = await supabase
     .from(prefixedTable('users'))
     .upsert([upsertData])

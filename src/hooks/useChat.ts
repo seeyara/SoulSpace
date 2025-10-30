@@ -121,25 +121,23 @@ export function useChat({
 
     const attemptSend = async (attempt: number): Promise<{ success: boolean; shouldEnd?: boolean }> => {
       try {
-        const userProfile = storage.getUserProfile();
-        
         // Filter out intro messages and failed messages
         const messageHistoryToSend = state.messages
           .filter(msg => msg.status !== 'failed')
-          .slice(state.messages.length > 2 && 
-                 state.messages[0].role === 'assistant' && 
+          .slice(state.messages.length > 2 &&
+                 state.messages[0].role === 'assistant' &&
                  state.messages[1].role === 'assistant' ? 2 : 0);
 
         const response = await axios.post('/api/chat-completion', {
           message: options?.isFinishEntry ? "_finish_entry_" : content,
           cuddleId,
           messageHistory: messageHistoryToSend,
-          forceEnd: options?.forceEnd, 
-          mode: 'guided'
+          forceEnd: options?.forceEnd,
+          mode: 'guided',
+          userId,
         }, {
           headers: {
             'Content-Type': 'application/json',
-            'x-user-profile': userProfile ? JSON.stringify(userProfile) : ''
           },
           signal: controller.signal,
           timeout: 30000 // 30 second timeout
@@ -202,7 +200,7 @@ export function useChat({
     };
 
     return attemptSend(1);
-  }, [state.messages, cuddleId, addMessage, updateMessageStatus, maxRetries, retryDelay]);
+  }, [state.messages, cuddleId, addMessage, updateMessageStatus, maxRetries, retryDelay, userId]);
 
   // Retry failed message
   const retryMessage = useCallback(async (messageId: string) => {

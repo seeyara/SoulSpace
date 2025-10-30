@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import BaseModal from './BaseModal';
 
 interface PrivacyModalProps {
@@ -24,42 +24,82 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const applyProfileState = useCallback((incoming?: Partial<UserProfile> & { lifestage?: string }) => {
+    if (!incoming) {
+      setStep('privacy');
+      setProfile({ cuddleOwnership: '', gender: '', lifeStage: '' });
+      return;
+    }
+
+    const nextProfile: UserProfile = {
+      cuddleOwnership: incoming.cuddleOwnership ?? '',
+      gender: incoming.gender ?? '',
+      lifeStage: incoming.lifeStage ?? incoming.lifestage ?? '',
+    };
+
+    setProfile(nextProfile);
+
+    if (nextProfile.cuddleOwnership && nextProfile.gender && nextProfile.lifeStage) {
+      setStep('done');
+    } else if (nextProfile.cuddleOwnership && nextProfile.gender) {
+      setStep('lifeStage');
+    } else if (nextProfile.cuddleOwnership) {
+      setStep('gender');
+    } else {
+      setStep('privacy');
+    }
+  }, []);
+
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined') {
       return;
     }
 
-    const storedProfile = localStorage.getItem('user_profile');
-    if (!storedProfile) {
-      setStep('privacy');
-      setProfile({ cuddleOwnership: '', gender: '', lifeStage: '' });
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(storedProfile) as Partial<UserProfile> & { lifestage?: string };
-      const lifeStage = parsed.lifeStage ?? parsed.lifestage ?? '';
-
-      setProfile({
-        cuddleOwnership: parsed.cuddleOwnership ?? '',
-        gender: parsed.gender ?? '',
-        lifeStage
-      });
-
-      if (parsed.cuddleOwnership && parsed.gender && lifeStage) {
-        setStep('done');
-      } else if (parsed.cuddleOwnership && parsed.gender) {
-        setStep('lifeStage');
-      } else if (parsed.cuddleOwnership) {
-        setStep('gender');
-      } else {
-        setStep('privacy');
+    const hydrateProfile = async () => {
+      const storedProfile = localStorage.getItem('user_profile');
+      if (storedProfile) {
+        try {
+          const parsed = JSON.parse(storedProfile) as Partial<UserProfile> & { lifestage?: string };
+          applyProfileState(parsed);
+          return;
+        } catch (error) {
+          console.error('Failed to parse stored profile:', error);
+        }
       }
-    } catch {
-      setStep('privacy');
-      setProfile({ cuddleOwnership: '', gender: '', lifeStage: '' });
-    }
-  }, [isOpen]);
+
+      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      if (!storedUserId) {
+        applyProfileState();
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/users/profile?userId=${encodeURIComponent(storedUserId)}`);
+        if (!response.ok) {
+          applyProfileState();
+          return;
+        }
+
+        const { profile: remoteProfile } = await response.json() as { profile?: Partial<UserProfile> | null };
+        if (remoteProfile) {
+          const normalized: UserProfile = {
+            cuddleOwnership: remoteProfile.cuddleOwnership ?? '',
+            gender: remoteProfile.gender ?? '',
+            lifeStage: remoteProfile.lifeStage ?? (remoteProfile as any).lifestage ?? '',
+          };
+          localStorage.setItem('user_profile', JSON.stringify(normalized));
+          applyProfileState(normalized);
+        } else {
+          applyProfileState();
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile from database:', error);
+        applyProfileState();
+      }
+    };
+
+    hydrateProfile();
+  }, [isOpen, applyProfileState]);
 
   const handleProfileChange = (field: keyof UserProfile, value: string) => {
     setProfile(prev => ({
