@@ -1,7 +1,7 @@
 'use client';
 
-// Feature flag for PrivacyModal
-const PRIVACY_MODAL_ENABLED = process.env.NEXT_PUBLIC_PRIVACY_MODAL_ENABLED === 'true';
+// Feature flag for PrivacyModal (enabled by default unless explicitly disabled)
+const PRIVACY_MODAL_ENABLED = process.env.NEXT_PUBLIC_PRIVACY_MODAL_ENABLED !== 'false';
 
 import { motion } from 'framer-motion';
 import { useState } from 'react';
