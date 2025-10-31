@@ -1,61 +1,77 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { prefixedTable, supabase } from '@/lib/supabase';
-import { cuddleData, cuddleIntro } from '@/data/cuddles';
 import type { CuddleId } from '@/types/api';
 import StreakModal from '@/components/StreakModal';
 import PrivacyModal from '@/components/PrivacyModal';
 import { useRouter } from 'next/navigation';
-import { format, isToday, set } from 'date-fns';
+import { format } from 'date-fns';
 import axios from 'axios';
 import { event as gaEvent } from '@/lib/utils/gtag';
-import { upsertUser } from '@/lib/utils/journalDb';
+import { fetchUserById, fetchUserByTempSessionId } from '@/lib/utils/journalDb';
 import { storage } from '@/lib/storage';
-import { cuddlePrompts } from '@/data/cuddles';
-import { fetchChatHistory, generateJournalResponse } from '@/lib/utils/chatUtils';
 import { useChatPersistence } from '@/hooks/useChatPersistence';
 import { completeJournalEntry } from '@/lib/api/journal';
-
-// Import mode toggle components
-import { JournalModeRadioToggle } from '@/components/JournalModeToggle';
 import { JournalSuccessModal } from '@/components/JournalSuccessModal';
-import BaseModal from '@/components/BaseModal';
 import TypingIndicator from '@/components/TypingIndicator';
-
-// Journal mode type
-export type JournalMode = 'flat' | 'guided';
 
 const VALID_CUDDLE_IDS: CuddleId[] = ['ellie-sr', 'olly-sr', 'ellie-jr', 'olly-jr'];
 const isValidCuddleId = (id: string | null): id is CuddleId =>
   !!id && (VALID_CUDDLE_IDS as readonly string[]).includes(id);
 
 const WELCOME_BACK_MESSAGE = "Welcome back! Would you like to continue or finish our conversation?";
-const INTRO_MESSAGE = "Hello, I'm {{cuddle_name}}, your companion for this journey. Let's take this time to reset and rejuvenate";
 
-// Function to get the current day of the 21-day challenge
-const getDayOfChallenge = (): number => {
-  const challengeStartDate = new Date('2025-08-01'); // September 1st, 2024
-  const today = new Date();
+interface UserProfile {
+  cuddleOwnership?: string;
+  gender?: string;
+  lifeStage?: string;
+  lifestage?: string;
+}
 
-  // Calculate difference in days
-  const diffTime = today.getTime() - challengeStartDate.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+interface UserRecordFromDb {
+  id: string;
+  name?: string | null;
+  cuddle_ownership?: string | null;
+  gender?: string | null;
+  life_stage?: string | null;
+  lifestage?: string | null;
+}
 
-  // Return day number (0-based), capped at 21 days
-  return Math.max(0, Math.min(diffDays, cuddlePrompts.length - 1));
+const isProfileComplete = (profile: UserProfile | null | undefined): boolean => {
+  if (!profile) {
+    return false;
+  }
+
+  const lifeStage = profile.lifeStage ?? profile.lifestage;
+
+  return Boolean(profile.cuddleOwnership && profile.gender && lifeStage);
 };
 
-// Function to get today's prompt
-const getTodaysPrompt = (): string => {
-  // During challenge period, use sequential prompts
-  const dayIndex = getDayOfChallenge();
-  return cuddlePrompts[dayIndex] || cuddlePrompts[0];
-};
+const readStoredProfile = (): UserProfile | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
 
+  const profileStr = localStorage.getItem('user_profile');
+  if (!profileStr) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(profileStr) as UserProfile;
+
+    return {
+      cuddleOwnership: parsed.cuddleOwnership,
+      gender: parsed.gender,
+      lifeStage: parsed.lifeStage ?? parsed.lifestage
+    };
+  } catch {
+    return null;
+  }
+};
 
 function JournalContent() {
   const searchParams = useSearchParams();
@@ -81,6 +97,13 @@ function JournalContent() {
   const [showInput, setShowInput] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [hasEvaluatedPrivacy, setHasEvaluatedPrivacy] = useState(false);
+  const [hasGlobalAccess, setHasGlobalAccess] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    return Boolean(storage.getEmail());
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isContinuingEntry, setIsContinuingEntry] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -89,74 +112,98 @@ function JournalContent() {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [page, setPage] = useState(1);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const [journalingMode, setJournalingMode] = useState<'guided' | 'free-form' | null>(null);
-  const [freeFormContent, setFreeFormContent] = useState('');
-  const [showSuggestedReplies, setShowSuggestedReplies] = useState(false);
-  const [lastUnfinishedEntry, setLastUnfinishedEntry] = useState<null | { mode: 'guided' | 'free-form', content: string }>(null);
-
-  // New dual-mode state
-  const [journalMode, setJournalMode] = useState<JournalMode>('flat');
-  const [loadedEntryMode, setLoadedEntryMode] = useState<JournalMode | null>(null);
-  const [showGuidedDisclaimer, setShowGuidedDisclaimer] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [flatJournalContent, setFlatJournalContent] = useState('');
-  const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
-  const [showIntroMessage, setShowIntroMessage] = useState(false);
-  const [showGratitudePrompt, setShowGratitudePrompt] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hasLoadedGuidedEntry, setHasLoadedGuidedEntry] = useState(false);
 
   const { queuePersistence, flushBeforeUnload, clearPersistence } = useChatPersistence({
     userId,
     cuddleId: selectedCuddle,
-    mode: journalMode,
     date: selectedDate,
     storageEnabled: true
   });
 
-  // Handle mode change
-  const handleModeChange = (mode: JournalMode) => {
-    if (mode === journalMode) {
-      return;
-    }
-
-    if (mode === 'guided' && journalMode === 'flat') {
-      setShowGuidedDisclaimer(true);
-      return;
-    }
-
-    setJournalMode(mode);
-    localStorage.setItem('journal-mode', mode);
-    storage.clearOngoingConversation();
-
-    if (mode === 'flat') {
-      initializeFlatMode();
-    }
-  };
-
-  // Initialize flat mode
-  const initializeFlatMode = () => {
-    // Check if already submitted today
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const submissionKey = `journal-submitted-${today}`;
-    const hasSubmitted = localStorage.getItem(submissionKey) === 'true';
-    setHasSubmittedToday(hasSubmitted);
-
-    if (!hasSubmitted) {
-      setMessages([]);
-      setShowInput(false);
-      setIsTyping(false);
-      setJournalingMode(null);
-      // Show both intro and prompt together after a short delay
-      setTimeout(() => {
-        setShowIntroMessage(true);
-        setShowGratitudePrompt(true);
-      }, 800);
-    } else {
-      getChatHistory(today);
-    }
-  };
-
   const hasHydratedMessagesRef = useRef(false);
+
+  const evaluatePrivacyRequirements = useCallback(() => {
+    const storedProfile = readStoredProfile();
+    setShowPrivacyModal(!isProfileComplete(storedProfile));
+  }, []);
+
+  const applyUserRecord = useCallback((record: UserRecordFromDb | null | undefined) => {
+    if (!record) {
+      return false;
+    }
+
+    setUserId(record.id);
+    storage.setUserId(record.id);
+
+    const nextName = typeof record.name === 'string' && record.name.trim().length > 0 ? record.name : 'Username';
+    setUserName(nextName);
+
+    const profileFromDb = {
+      cuddleOwnership: typeof record.cuddle_ownership === 'string' ? record.cuddle_ownership : '',
+      gender: typeof record.gender === 'string' ? record.gender : '',
+      lifeStage:
+        typeof record.life_stage === 'string'
+          ? record.life_stage
+          : typeof record.lifestage === 'string'
+            ? record.lifestage
+            : '',
+    };
+
+    if (profileFromDb.cuddleOwnership || profileFromDb.gender || profileFromDb.lifeStage) {
+      storage.setUserProfile(profileFromDb);
+      evaluatePrivacyRequirements();
+    }
+
+    return true;
+  }, [evaluatePrivacyRequirements]);
+
+  const getChatHistory = useCallback(async (dateOverride?: string) => {
+    const storedUserId = storage.getUserId();
+
+    if (!storedUserId) {
+      return false;
+    }
+
+    const dateToUse = dateOverride ?? selectedDate;
+
+    try {
+      const response = await fetch(`/api/chat?userId=${storedUserId}&date=${dateToUse}`);
+      if (!response.ok) {
+        console.error('Failed to fetch chat history:', response.statusText);
+        return false;
+      }
+
+      const { data } = await response.json();
+
+      if (data?.messages?.length && data.mode === 'guided') {
+        if (isValidCuddleId(data.cuddleId) && data.cuddleId !== selectedCuddle) {
+          setSelectedCuddle(data.cuddleId);
+          storage.setCuddleId(data.cuddleId);
+        }
+
+        const messagesWithWelcome = [
+          ...data.messages,
+          { role: 'assistant' as const, content: WELCOME_BACK_MESSAGE }
+        ];
+
+        setMessages(messagesWithWelcome);
+        setIsTyping(false);
+        setIsContinuingEntry(true);
+        setHasMoreMessages(Boolean(data.hasMore));
+        setPage(1);
+        setShowInput(false);
+        setHasLoadedGuidedEntry(true);
+        return true;
+      }
+    } catch (error) {
+      console.error('Error fetching chat history:', error);
+    }
+
+    return false;
+  }, [selectedCuddle, selectedDate]);
 
   useEffect(() => {
     if (!hasHydratedMessagesRef.current) {
@@ -165,188 +212,51 @@ function JournalContent() {
     }
 
     if (messages.length > 0) {
-      queuePersistence(messages, { mode: journalMode, cuddleId: selectedCuddle, date: selectedDate });
+      queuePersistence(messages, { cuddleId: selectedCuddle, date: selectedDate });
     } else {
       clearPersistence();
     }
-  }, [messages, queuePersistence, journalMode, selectedCuddle, selectedDate, clearPersistence]);
-
-  const getChatHistory = async (date: string) => {
-    // Get userId and tempSessionId from localStorage
-    const storedUserId = storage.getUserId();
-    const tempSessionId = storage.getSessionId();
-
-    // If neither exists, return early
-    if (!storedUserId && !tempSessionId) {
-      console.log('No userId or tempSessionId found in localStorage');
-      return;
-    }
-
-    try {
-      console.log('Fetching chat history with:', { storedUserId, tempSessionId, date });
-      // Ensure null values are converted to undefined
-      const data = await fetchChatHistory(
-        date,
-        storedUserId === null ? undefined : storedUserId,
-        tempSessionId === null ? undefined : tempSessionId
-      );
-
-      // If chat history exists, load it into the chat
-      if (data?.messages && data.messages.length > 0) {
-        setMessages(data.messages);
-        setIsTyping(false);
-        setLoadedEntryMode(data.mode === 'flat' ? 'flat' : 'guided');
-        setIsContinuingEntry(true);
-        if (data.mode === 'flat') {
-          setHasSubmittedToday(true);
-        }
-        console.log('Loaded chat history:', data.messages);
-      } else {
-        console.log('No chat history found for userId or tempSessionId');
-        setIsContinuingEntry(false);
-        setLoadedEntryMode(null);
-        setMessages([]);
-      }
-    } catch (error) {
-      console.error('Error fetching chat history:', error);
-    }
-    return
-  }
-
-  // Handle flat journal submission
-  const handleFlatJournalSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!flatJournalContent.trim() || !userId) return;
-
-    const userMessage = { role: 'user' as const, content: flatJournalContent.trim() };
-
-    // Include intro messages in the conversation
-    const introMessage = { role: 'assistant' as const, content: INTRO_MESSAGE.replace("{{cuddle_name}}", getDisplayCuddleName(selectedCuddle)) };
-    const promptMessage = { role: 'assistant' as const, content: getTodaysPrompt() };
-
-    gaEvent({
-      action: 'flat_journal_submit',
-      category: 'journal',
-    });
-
-    // Immediately update UI with user message and show typing indicator
-    const newMessages = [...messages, introMessage, promptMessage, userMessage];
-    setMessages(newMessages);
-    setFlatJournalContent('');
-    setShowGratitudePrompt(false);
-    setShowIntroMessage(false);
-    setIsTyping(true);
-    let finalMessages = [...newMessages];
-
-    setTimeout(async () => {
-      try {
-        // --- Generate AI response ---
-        const aiResponse = await generateJournalResponse(
-          getTodaysPrompt(),
-          userMessage.content,
-          getDisplayCuddleName(selectedCuddle)
-        );
-
-        // Split into sentences
-        const sentences = aiResponse.split(/(?<=[.!?])\s+/).filter(s => s.trim());
-        const firstMessage = sentences.slice(0, Math.ceil(sentences.length / 2)).join(' ');
-        const secondMessage = sentences.slice(Math.ceil(sentences.length / 2)).join(' ');
-
-        const firstReply = { role: 'assistant' as const, content: firstMessage };
-        const secondReply = { role: 'assistant' as const, content: secondMessage };
-
-        finalMessages = [...newMessages, firstReply, secondReply];
-
-        // UI flow
-        setMessages([...newMessages, firstReply]);
-        setTimeout(() => {
-          setMessages(finalMessages);
-          setIsTyping(false);
-        }, 2000);
-
-      } catch (aiError) {
-        console.error('Error generating AI response:', aiError);
-        const fallbackReply = {
-          role: 'assistant' as const,
-          content: "Thank you for sharing this, it means so much to me 🫶🏼. I'm always here for you"
-        };
-        finalMessages = [...newMessages, fallbackReply];
-        setMessages(finalMessages);
-        setIsTyping(false);
-      }
-
-      // --- Save messages (whether AI or fallback) ---
-      try {
-        const success = await queuePersistence(finalMessages, {
-          immediate: true,
-          mode: 'flat',
-          cuddleId: selectedCuddle,
-          date: selectedDate
-        });
-
-        if (!success) {
-          console.error('Error saving flat journal entry: persistence failed');
-          setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
-          return;
-        }
-
-        storage.clearOngoingConversation();
-
-        const today = format(new Date(), 'yyyy-MM-dd');
-        localStorage.setItem(`journal-submitted-${today}`, 'true');
-
-      } catch (saveError) {
-        console.error('Error saving flat journal entry:', saveError);
-        setErrorMessage('Having trouble saving your journal entry. Please try again in a moment.');
-      }
-    }, 1000);
-  }
-
+  }, [messages, queuePersistence, selectedCuddle, selectedDate, clearPersistence]);
 
   // Initialize user and start intro message
   useEffect(() => {
     const initializeUser = async () => {
       try {
+        let sessionId = storage.getSessionId();
+        if (!sessionId) {
+          sessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          storage.setSessionId(sessionId);
+        }
+
         const storedUserId = storage.getUserId();
 
         if (storedUserId) {
-          console.log('Using stored user ID:', storedUserId);
           setUserId(storedUserId);
 
-          // Check if user has a custom name
-          const { data } = await supabase
-            .from(prefixedTable('users'))
-            .select('name')
-            .eq('id', storedUserId)
-            .single();
+          const { data, error } = await fetchUserById(storedUserId);
+          if (error && error.code !== 'PGRST116') {
+            console.error('Error fetching stored user:', error);
+            return;
+          }
 
-          setUserName(data?.name || 'Username');
+          applyUserRecord((data ?? null) as UserRecordFromDb | null);
           return;
         }
 
-        // Create new user without setting a name
-        const tempSessionId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const { data: user, error: createError } = await upsertUser({ tempSessionId });
-        if (createError) {
-          console.error('Error creating user:', createError);
+        const { data, error } = await fetchUserByTempSessionId(sessionId);
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error fetching user by session:', error);
           return;
         }
-        if (user) {
-          const newUserId = user.id;
 
-          setUserId(newUserId);
-          setUserName('Username');
-          // Show privacy modal for new users
-          setShowPrivacyModal(true);
-        }
+        applyUserRecord((data ?? null) as UserRecordFromDb | null);
       } catch (error) {
         console.error('Error in initializeUser:', error);
       }
     };
 
     initializeUser();
-  }, []);
+  }, [applyUserRecord]);
 
   // Load userId and selectedCuddle from localStorage on mount
   useEffect(() => {
@@ -383,143 +293,82 @@ function JournalContent() {
     setIsInitialLoad(false);
   }, [messages, isInitialLoad]);
 
-  // Add logging for key state changes
   useEffect(() => {
-    console.log('userId changed:', userId);
-  }, [userId]);
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const updateAccessAndPrivacy = () => {
+      const hasEmail = Boolean(storage.getEmail());
+      setHasGlobalAccess(hasEmail);
+
+      if (hasEmail) {
+        evaluatePrivacyRequirements();
+        setHasEvaluatedPrivacy(true);
+      } else {
+        setHasEvaluatedPrivacy(false);
+      }
+    };
+
+    updateAccessAndPrivacy();
+
+    window.addEventListener('soul:global-access-granted', updateAccessAndPrivacy);
+
+    return () => {
+      window.removeEventListener('soul:global-access-granted', updateAccessAndPrivacy);
+    };
+  }, [evaluatePrivacyRequirements]);
+
   useEffect(() => {
-    console.log('selectedCuddle changed:', selectedCuddle);
-  }, [selectedCuddle]);
-  useEffect(() => {
-    console.log('selectedDate changed:', selectedDate);
-  }, [selectedDate]);
-  useEffect(() => {
-    console.log('showPrivacyModal changed:', showPrivacyModal);
-  }, [showPrivacyModal]);
+    evaluatePrivacyRequirements();
+  }, [evaluatePrivacyRequirements]);
 
   // Main chat history fetch effect with logging
   useEffect(() => {
-    console.log('Fetching chat history with:', { userId, selectedCuddle, selectedDate, showPrivacyModal });
-    const fetchChatHistory = async () => {
-      const storedUserId = storage.getUserId();
-      if (!storedUserId) {
-        // Don't start conversation yet if no user ID (wait for privacy modal)
+    if (!hasGlobalAccess || !hasEvaluatedPrivacy || showPrivacyModal || messages.length > 0) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const hydrateGuidedConversation = async () => {
+      const foundExistingEntry = await getChatHistory();
+
+      if (isCancelled || foundExistingEntry) {
         return;
       }
-      try {
-        const response = await fetch(`/api/chat?userId=${storedUserId}&date=${selectedDate}&page=1`);
-        const { data } = await response.json();
-        if (data?.messages && data.messages.length > 0) {
-          // Returning user: Entry exists for today
-          const entryMode: JournalMode = data.mode === 'flat' ? 'flat' : 'guided';
-          setLoadedEntryMode(entryMode);
-          setIsContinuingEntry(true);
-          setHasMoreMessages(data.hasMore);
-          setPage(1);
-          setIsTyping(false);
-          setShowInput(entryMode === 'guided');
-          setShowSuggestedReplies(false);
 
-          if (entryMode === 'flat') {
-            setJournalingMode('free-form');
-            setHasSubmittedToday(true);
-            setShowIntroMessage(false);
-            setShowGratitudePrompt(false);
-            setMessages(data.messages);
-            console.log('Loaded flat journal entry:', data.messages);
-          } else {
-            setJournalingMode('guided');
-            const messagesWithWelcome = [
-              ...data.messages,
-              { role: 'assistant' as const, content: WELCOME_BACK_MESSAGE }
-            ];
-            setMessages(messagesWithWelcome);
-            setShowSuggestedReplies(true);
-            console.log('Loaded previous messages:', data.messages);
-          }
-        } else {
-          setIsContinuingEntry(false);
-          setLoadedEntryMode(null);
-          if (journalMode === 'guided') {
-            // New user or no entry for today
-            const cuddle = cuddleData.cuddles[selectedCuddle];
-            setIsTyping(true);
-            setTimeout(() => {
-              setMessages([
-                {
-                  role: 'assistant',
-                  content: `Hi! I’m ${getCuddleName(selectedCuddle)}, I'm always here when your mind feels a little too full. Let's take it slow and gently sort through your thoughts together..`
-                },
-                {
-                  role: 'assistant',
-                  content: "What's on your mind today?"
-                }
-              ]);
-              setIsTyping(false);
-              setShowSuggestedReplies(false);
-              setIsContinuingEntry(false);
-              setShowInput(true);
-              setJournalingMode('guided');
-              console.log('Started new user flow');
-            }, 1000);
-          } else {
-            // New user or no entry for today - let mode-specific initialization handle this
-            console.log('Fresh user - waiting for mode-specific initialization');
-          }
+      setIsTyping(true);
+      setTimeout(() => {
+        if (isCancelled) {
+          return;
         }
-      } catch (error) {
-        console.error('Error fetching chat history:', error);
-        // Fallback to new user flow
-        const cuddle = cuddleData.cuddles[selectedCuddle];
-        setIsTyping(true);
-        setTimeout(() => {
-          setMessages([
-            {
-              role: 'assistant',
-              content: `Hi! I’m ${getCuddleName(selectedCuddle)}. I’m here to listen. Let’s journal together today.`
-            },
-            {
-              role: 'assistant',
-              content: "What's on your mind today?"
-            }
-          ]);
-          setIsTyping(false);
-          setShowSuggestedReplies(false);
-          setIsContinuingEntry(false);
-          setLoadedEntryMode(null);
-          setShowInput(true);
-          setJournalingMode('guided');
-          console.log('Started new user flow (error fallback)');
-        }, 1000);
-      }
-    };
-    fetchChatHistory();
-  }, [selectedCuddle, selectedDate, userId, showPrivacyModal, journalMode]);
 
-  // Separate effect to handle privacy modal state changes
-  useEffect(() => {
-    if (!showPrivacyModal && userId && messages.length === 0) {
-      const storedUserId = storage.getUserId();
-      if (storedUserId) {
-        // Check if this is a new user (has temp_session_id)
-        const checkIfNewUser = async () => {
-          if (hasSubmittedToday) {
-            // This is a new user, start the conversation
-            const cuddle = cuddleData.cuddles[selectedCuddle];
-            setIsTyping(true);
-            setTimeout(() => {
-              setMessages([{
-                role: 'assistant',
-                content: cuddleIntro.replace('{cuddle-name}', cuddle.name)
-              }]);
-              setIsTyping(false);
-            }, 1500);
+        setMessages([
+          {
+            role: 'assistant',
+            content: `Hi! I’m ${getCuddleName(selectedCuddle)}, I'm always here when your mind feels a little too full. Let's take it slow and gently sort through your thoughts together..`
+          },
+          {
+            role: 'assistant',
+            content: "What's on your mind today?"
           }
-        };
-        checkIfNewUser();
-      }
-    }
-  }, [showPrivacyModal, userId, selectedCuddle, messages.length]);
+        ]);
+        setIsTyping(false);
+        setIsContinuingEntry(false);
+        setShowInput(true);
+        setHasLoadedGuidedEntry(false);
+        setHasMoreMessages(false);
+        setPage(1);
+      }, 1000);
+    };
+
+    hydrateGuidedConversation();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedCuddle, showPrivacyModal, messages.length, hasGlobalAccess, getChatHistory, hasEvaluatedPrivacy]);
 
   useEffect(() => {
     // Load ongoing conversation from localStorage if exists
@@ -529,32 +378,9 @@ function JournalContent() {
       if (cuddle === selectedCuddle) {
         setMessages(savedMessages);
         setShowInput(true);
-        setJournalingMode('guided'); // Assume guided mode for ongoing conversations
       }
     }
   }, [selectedCuddle]);
-
-  // Fetch last unfinished entry on mount
-  useEffect(() => {
-    const fetchLastUnfinishedEntry = async () => {
-      const storedUserId = storage.getUserId();
-      if (!storedUserId) return;
-      try {
-        const res = await fetch(`/api/chat?userId=${storedUserId}&unfinished=1`);
-        const { data } = await res.json();
-        if (data && data.lastUnfinished) {
-          setLastUnfinishedEntry(data.lastUnfinished);
-          if (data.lastUnfinished.mode === 'free-form') {
-            setJournalingMode('free-form');
-            setFreeFormContent(data.lastUnfinished.content);
-          }
-        }
-      } catch {
-        // ignore
-      }
-    };
-    fetchLastUnfinishedEntry();
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -578,9 +404,6 @@ function JournalContent() {
     setIsTyping(true);
 
     try {
-      // Get user profile from localStorage
-      const userProfile = storage.getUserProfile();
-
       // For OpenAI, skip the first two assistant messages if present (but keep for display)
       let messageHistoryToSend = messages;
       if (messages.length > 2 && messages[0].role === 'assistant' && messages[1].role === 'assistant') {
@@ -589,21 +412,25 @@ function JournalContent() {
 
       let response;
       try {
-        response = await axios.post('/api/chat-completion', {
+        const storedSessionId = storage.getSessionId();
+        const payload: Record<string, unknown> = {
           message: userMessage.content,
           cuddleId: selectedCuddle,
-          messageHistory: messageHistoryToSend
-        }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-profile': userProfile ? JSON.stringify(userProfile) : ''
-          },
-        })
+          messageHistory: messageHistoryToSend,
+        };
+
+        if (storedUserId) {
+          payload.userId = storedUserId;
+        }
+
+        if (storedSessionId) {
+          payload.tempSessionId = storedSessionId;
+        }
+
+        response = await axios.post('/api/chat-completion', payload);
       } catch (error) {
         console.error('Error:', error);
       }
-
-      console.log("response", response)
 
       if (!response) {
         throw new Error('Failed to get AI response or response is null');
@@ -649,70 +476,7 @@ function JournalContent() {
     }
   };
 
-  const handleFreeFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!freeFormContent.trim()) return;
-
-    const storedUserId = storage.getUserId();
-    if (!storedUserId) {
-      console.error('No user ID available');
-      router.push('/');
-      return;
-    }
-
-    try {
-      const success = await queuePersistence([
-        {
-          role: 'user' as const,
-          content: freeFormContent
-        }
-      ], {
-        immediate: true,
-        mode: 'flat',
-        cuddleId: selectedCuddle,
-        date: selectedDate
-      });
-
-      if (!success) {
-        throw new Error('Failed to save journal entry');
-      }
-
-      storage.clearOngoingConversation();
-
-      // Batch state updates to prevent multiple re-renders
-      setFreeFormContent('');
-      setShowInput(false);
-      setIsTyping(true);
-      setJournalingMode('free-form');
-
-      setTimeout(() => {
-        setMessages(prev => [
-          ...prev,
-          { role: 'user', content: freeFormContent },
-          {
-            role: 'assistant',
-            content: "Thank you for sharing your thoughts with me. I've saved your journal entry. 💜 \n Come back tomorrow for more journaling!"
-          }
-        ]);
-        setIsTyping(false);
-        setShowSuggestedReplies(true);
-
-        // Show streak modal after the thank you message
-      }, 1000);
-
-    } catch (error) {
-      console.error('Error saving journal entry:', error);
-      // Batch error state updates
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: "I'm having trouble saving your entry right now. Could you try again?"
-      }]);
-      setShowInput(true);
-    }
-  };
-
   // Remove all UI and logic related to mode selection and suggested replies
-  // Remove handleModeSelection and showSuggestedReplies logic
   // Remove the button for guided journaling in the chat area
 
   const handleCloseStreakModal = () => {
@@ -771,13 +535,14 @@ function JournalContent() {
         userId: storedUserId,
         cuddleId: selectedCuddle,
         messages,
-        mode: journalMode,
         date: selectedDate,
       });
 
       setIsTyping(false);
       setMessages(finalMessages);
       storage.clearOngoingConversation();
+      const today = format(new Date(), 'yyyy-MM-dd');
+      localStorage.setItem(`journal-submitted-${today}`, 'true');
     } catch (error) {
       console.error('Error in handleFinishEntry:', error);
       setIsTyping(false);
@@ -786,7 +551,6 @@ function JournalContent() {
   };
 
   const handleContinue = async () => {
-    console.log('[handleContinue] lastUnfinishedEntry:', lastUnfinishedEntry);
     gaEvent({
       action: 'continue_button',
       category: 'journal',
@@ -795,19 +559,8 @@ function JournalContent() {
     setShowInput(false);
     setIsTyping(true);
 
-    // If last unfinished entry is free-form, load it
-    if (lastUnfinishedEntry && lastUnfinishedEntry.mode === 'free-form') {
-      setJournalingMode('free-form');
-      setFreeFormContent(lastUnfinishedEntry.content);
-      setIsTyping(false);
-      setShowInput(true);
-      return;
-    }
-    // If not, always show input for guided journaling
-    setJournalingMode('guided');
     setIsTyping(false);
     setShowInput(true);
-    setShowSuggestedReplies(false);
   };
 
   // Add this effect to update the name in the database when finishing entry
@@ -900,60 +653,32 @@ function JournalContent() {
     };
   }, [flushBeforeUnload]);
 
-  // Helper to check if user profile is complete
-  interface UserProfile {
-    cuddleOwnership?: string;
-    gender?: string;
-    lifeStage?: string;
-  }
-
-  const isProfileComplete = (profile: UserProfile | null | undefined): boolean => {
-    return Boolean(profile?.cuddleOwnership && profile?.gender && profile?.lifeStage);
-  };
-
-  // Load saved mode preference and initialize mode
   useEffect(() => {
-    const savedMode = localStorage.getItem('journal-mode') as JournalMode;
-    if (savedMode && ['flat', 'guided'].includes(savedMode)) {
-      setJournalMode(savedMode);
+    if (typeof window === 'undefined') {
+      return;
     }
 
-    // Initialize flat mode if selected
-    if (userId && (savedMode === 'flat' || journalMode === 'flat') && !isContinuingEntry) {
-      initializeFlatMode();
-    }
-  }, [userId, isContinuingEntry]);
+    const handleProfileUpdate = () => {
+      evaluatePrivacyRequirements();
+    };
 
-  // Show PrivacyModal until profile is complete
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const profileStr = localStorage.getItem('user_profile');
-      let profile = null;
-      try {
-        profile = profileStr ? JSON.parse(profileStr) : null;
-      } catch { }
-      if (!isProfileComplete(profile)) {
-        setShowPrivacyModal(true);
-      } else {
-        setShowPrivacyModal(false);
-      }
-    }
-  }, []);
+    window.addEventListener('soul:profile-updated', handleProfileUpdate);
+
+    return () => {
+      window.removeEventListener('soul:profile-updated', handleProfileUpdate);
+    };
+  }, [evaluatePrivacyRequirements]);
 
   // When PrivacyModal closes, re-check profile completeness
   const handlePrivacyModalClose = () => {
-    if (typeof window !== 'undefined') {
-      const profileStr = localStorage.getItem('user_profile');
-      let profile = null;
-      try {
-        profile = profileStr ? JSON.parse(profileStr) : null;
-      } catch { }
-      if (!isProfileComplete(profile)) {
-        setShowPrivacyModal(true);
-      } else {
-        setShowPrivacyModal(false);
-      }
+    const storedProfile = readStoredProfile();
+
+    if (!isProfileComplete(storedProfile)) {
+      setShowPrivacyModal(true);
+      return;
     }
+
+    setShowPrivacyModal(false);
   };
 
   return (
@@ -969,236 +694,22 @@ function JournalContent() {
             className="h-8 w-auto cursor-pointer"
             onClick={() => router.push('/')}
           />
-          <div className="flex items-center gap-4">
-            <JournalModeRadioToggle
-              mode={journalMode}
-              onModeChange={handleModeChange}
-              disabled={isTyping}
-            />
-          </div>
+          {/* <div className="text-sm font-medium text-primary">
+            Guided journaling with {getDisplayCuddleName(selectedCuddle)}
+          </div> */}
         </div>
       </header>
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto" ref={messagesContainerRef}>
-        {journalMode === 'flat' ? (
-          // Flat Journal Mode
-          <div className="max-w-4xl mx-auto px-4 pt-20 pb-24">
-            <AnimatePresence mode="wait">
-              {showIntroMessage && (
-                <motion.div
-                  key="intro"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  className="flex items-start space-x-4 mb-8"
-                >
-                  <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-full overflow-hidden">
-                      <Image
-                        src={getCuddleImage(selectedCuddle)}
-                        alt={getDisplayCuddleName(selectedCuddle)}
-                        width={48}
-                        height={48}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <div className="bg-primary/10 rounded-2xl rounded-tl-md px-6 py-4">
-                      <p className="text-primary leading-relaxed">
-                        {INTRO_MESSAGE.replace("{{cuddle_name}}", getDisplayCuddleName(selectedCuddle))}
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {showGratitudePrompt && (
-                <motion.div
-                  key="prompt"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-start space-x-4 mb-8"
-                >
-                  <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-full overflow-hidden">
-                      <Image
-                        src={getCuddleImage(selectedCuddle)}
-                        alt={getDisplayCuddleName(selectedCuddle)}
-                        width={48}
-                        height={48}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <div className="bg-primary/10 rounded-2xl rounded-tl-md px-6 py-4">
-                      <p className="text-primary leading-relaxed font-medium">
-                        {getTodaysPrompt()}
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Display messages in flat journal mode */}
-            <AnimatePresence>
-              {messages.length > 0 && messages.map((message, index) => {
-                const isLastAssistantMessage = message.role === 'assistant' &&
-                  (index === messages.length - 1 || messages[index + 1]?.role === 'user');
-                const isFirstAssistantMessage = message.role === 'assistant' &&
-                  (index === 0 || messages[index - 1]?.role === 'user');
-                const isLastMessage = index === messages.length - 1;
-
-                if (message.role === 'user') {
-                  return (
-                    <motion.div
-                      key={`flat-message-${index}`}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      className="flex justify-end mb-6"
-                    >
-                      <div className="flex flex-col max-w-[85%] items-end">
-                        <div className="p-4 rounded-2xl bg-primary text-white">
-                          {message.content}
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                } else {
-                  return (
-                    <motion.div
-                      key={`flat-message-${index}`}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      className="flex justify-start gap-3 mb-6"
-                    >
-                      <div className="flex-shrink-0 w-10 flex justify-center items-start">
-                        {isFirstAssistantMessage && (
-                          <Image
-                            src={getCuddleImage(selectedCuddle)}
-                            alt={getCuddleName(selectedCuddle)}
-                            width={40}
-                            height={40}
-                            className="h-10 w-10 rounded-full"
-                          />
-                        )}
-                      </div>
-                      <div className="flex flex-col max-w-[85%] items-start">
-                        <div className="p-4 rounded-2xl bg-primary/10 text-primary">
-                          {message.content}
-                        </div>
-                        {isLastAssistantMessage && (
-                          <span className="text-sm text-primary/60 mt-1 ml-2 tracking-[0.02em]">
-                            {getDisplayCuddleName(selectedCuddle)} 💭
-                          </span>
-                        )}
-                        {isLastMessage && !hasSubmittedToday && !isTyping && (
-                          <div className="mt-4 ml-2">
-                            <button
-                              onClick={() => {
-                                const userEmail = storage.getEmail();
-                                userEmail ? setShowSuccessModal(true) : setShowStreakModal(true);
-                                setHasSubmittedToday(true); // Mark as submitted today
-                              }}
-                              className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 flex items-center gap-2"
-                            >
-                              <span>Save my streak 🔥</span>
-
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                }
-              })}
-            </AnimatePresence>
-
-            {/* Typing Indicator for Flat Journal Mode */}
-            <AnimatePresence>
-              {isTyping && journalMode === 'flat' && (
-                <TypingIndicator
-                  cuddleImage={getCuddleImage(selectedCuddle)}
-                  cuddleName={getCuddleName(selectedCuddle)}
-                  displayName={getDisplayCuddleName(selectedCuddle)}
-                />
-              )}
-            </AnimatePresence>
-
-            {/* Flat Journal Input */}
-            <AnimatePresence>
-              {showGratitudePrompt && !hasSubmittedToday && (
-                <motion.div
-                  initial={{ opacity: 0, y: 50 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="mt-8"
-                >
-                  <form onSubmit={handleFlatJournalSubmit} className="space-y-4">
-                    <div className="relative max-w-2xl mx-auto w-full sm:px-0 px-2">
-                      <textarea
-                        value={flatJournalContent}
-                        onChange={(e) => setFlatJournalContent(e.target.value)}
-                        placeholder={`Hey ${selectedCuddle} this is ....\n\nLately I've been...`}
-                        maxLength={10000}
-                        className="w-full px-6 py-4 border-2 border-primary/20 rounded-2xl resize-none focus:outline-none focus:border-primary placeholder:text-gray-400 text-primary leading-relaxed min-h-[200px] text-base bg-white"
-                        style={{ minHeight: '200px', fontFamily: 'inherit' }}
-                      />
-                    </div>
-
-                    <div className="flex justify-center">
-                      <button
-                        type="submit"
-                        disabled={!flatJournalContent.trim()}
-                        className={`px-8 py-3 rounded-2xl font-medium transition-all duration-200 ${flatJournalContent.trim()
-                          ? 'bg-primary text-white hover:bg-primary/90 focus:ring-2 focus:ring-primary focus:ring-opacity-50 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
-                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                          } focus:outline-none`}
-                      >
-                        Send
-                      </button>
-                    </div>
-                  </form>
-                </motion.div>
-              )}
-
-              {/* {hasSubmittedToday && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-8"
-                >
-                  <div className="bg-pri-50 border border-green-200 rounded-2xl p-6 text-center">
-                    <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                    <h3 className="text-lg font-semibold text-green-900 mb-2">
-                      You've already journaled today! ✨
-                    </h3>
-                    <p className="text-green-700">
-                      Come back tomorrow for your next reflection session with {getDisplayCuddleName(selectedCuddle)}.
-                    </p>
-                  </div>
-                </motion.div>
-              )} */}
-            </AnimatePresence>
-          </div>
-        ) : (
-          // Guided Journal Mode (existing chat interface)
-          <div className="max-w-3xl mx-auto px-4 pt-20 pb-24">
+        
+          <div className="max-w-3xl mx-auto px-4 pt-20">
             {isLoadingMore && (
               <div className="flex justify-center py-4 mb-4">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
               </div>
             )}
-            {isContinuingEntry && (loadedEntryMode ?? journalMode) === 'guided' && messages.length > 0 && (
+            {isContinuingEntry && hasLoadedGuidedEntry && messages.length > 0 && (
               <div className="mb-4 text-primary font-medium text-lg">Here’s what you shared earlier today…</div>
             )}
             <AnimatePresence>
@@ -1285,7 +796,11 @@ function JournalContent() {
                             <button
                               onClick={() => {
                                 const userEmail = storage.getEmail();
-                                userEmail ? setShowSuccessModal(true) : setShowStreakModal(true);
+                                if (userEmail) {
+                                  setShowSuccessModal(true);
+                                } else {
+                                  setShowStreakModal(true);
+                                }
                               }}
                               className="bg-primary text-white px-6 py-3 rounded-2xl font-medium hover:bg-primary/90 transition-colors duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 flex items-center gap-2"
                             >
@@ -1301,7 +816,7 @@ function JournalContent() {
             </AnimatePresence>
 
             {/* Typing Indicator */}
-            {isTyping && journalMode === 'guided' && (
+            {isTyping && (
               <div className="mt-4">
                 <AnimatePresence>
                   <TypingIndicator
@@ -1316,10 +831,9 @@ function JournalContent() {
             {/* Add ref for auto-scrolling */}
             <div ref={messagesEndRef} />
           </div>
-        )}
 
-        {/* User Response Input - only show for guided mode */}
-        {journalMode === 'guided' && showInput && (
+        {/* User Response Input */}
+        {showInput && (
           <div className="flex justify-end">
             <div className="max-w-2xl mx-auto w-full sm:px-0 px-2">
               {isContinuingEntry ? (
@@ -1337,34 +851,6 @@ function JournalContent() {
                     Continue
                   </button>
                 </div>
-              ) : journalingMode === 'free-form' ? (
-                <form onSubmit={handleFreeFormSubmit} className="space-y-4">
-                  <textarea
-                    value={freeFormContent}
-                    onChange={(e) => setFreeFormContent(e.target.value)}
-                    placeholder="Write down your thoughts or feelings or experiences that you'd like to reflect on..."
-                    rows={8}
-                    className="w-full px-6 py-4 rounded-2xl border-2 border-primary/20 focus:border-primary outline-none bg-white resize-none text-base"
-                  />
-                  <div className="flex justify-between items-center">
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleFinishEntry}
-                        className="text-primary/70 border-2 border-primary/20 px-4 py-2 rounded-2xl font-medium hover:bg-primary/5 transition-colors"
-                      >
-                        End entry
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={!freeFormContent.trim()}
-                        className="bg-primary text-white px-6 py-2 rounded-2xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
-                      >
-                        Save Entry
-                      </button>
-                    </div>
-                  </div>
-                </form>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-2">
                   <textarea
@@ -1405,61 +891,9 @@ function JournalContent() {
       />
 
       <PrivacyModal
-        isOpen={showPrivacyModal}
+        isOpen={hasGlobalAccess && showPrivacyModal}
         onClose={handlePrivacyModalClose}
       />
-
-      {/* Guided Mode Disclaimer Modal */}
-      <BaseModal
-        isOpen={showGuidedDisclaimer}
-        onClose={() => setShowGuidedDisclaimer(false)}
-        maxWidth="max-w-md"
-      >
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-6 rounded-full overflow-hidden">
-            <Image
-              src={getCuddleImage(selectedCuddle)}
-              alt={getDisplayCuddleName(selectedCuddle)}
-              width={64}
-              height={64}
-              className="w-full h-full object-cover"
-            />
-          </div>
-
-          <h3 className="text-xl font-semibold text-gray-900 mb-4">
-            Switch to Guided Journaling?
-          </h3>
-
-          <div className="bg-secondary border border-primary/10 rounded-lg p-4 mb-4">
-            <p className="text-sm">
-              Guided Journalling is experimental and uses GPT to guide reflection.
-              <br />For medical advice, please seek professional help.
-            </p>
-          </div>
-
-          <div className="flex flex-col space-y-3">
-            <button
-              onClick={() => {
-                storage.clearOngoingConversation();
-                setJournalMode('guided');
-                localStorage.setItem('journal-mode', 'guided');
-                setShowGuidedDisclaimer(false);
-                setJournalingMode('guided');
-                setShowInput(true);
-              }}
-              className="w-full px-4 py-3 text-sm font-medium text-white bg-primary border border-transparent rounded-lg hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 transition-colors duration-200"
-            >
-              Okay, got it
-            </button>
-            <button
-              onClick={() => setShowGuidedDisclaimer(false)}
-              className="w-full px-4 py-3 text-sm font-medium text-primary bg-secondary border border-primary/10 rounded-lg hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 transition-colors duration-200"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </BaseModal>
 
       {/* Error Message */}
       <AnimatePresence>

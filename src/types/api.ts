@@ -110,6 +110,8 @@ export interface ChatCompletionRequest {
   cuddleId: CuddleId;
   messageHistory: ChatMessage[];
   forceEnd?: boolean;
+  userId?: string;
+  tempSessionId?: string;
 }
 
 export interface ChatCompletionResponse {
@@ -121,7 +123,6 @@ export interface SaveChatRequest {
   messages: ChatMessage[];
   userId: string;
   cuddleId: CuddleId;
-  mode?: 'guided' | 'flat';
 }
 
 export interface GetChatRequest {

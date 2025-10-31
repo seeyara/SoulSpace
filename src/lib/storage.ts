@@ -18,6 +18,7 @@ export interface UserProfile {
   age?: number;
   interests?: string[];
   lifestage?: string;
+  lifeStage?: string;
   [key: string]: string | number | string[] | undefined;
 }
 
@@ -151,6 +152,9 @@ class StorageManager {
     // Ensure lifestage is always present
     if (!('lifestage' in profile)) {
       profile.lifestage = '';
+    }
+    if (!('lifeStage' in profile) && typeof profile.lifestage === 'string') {
+      profile.lifeStage = profile.lifestage;
     }
     return profile;
   }

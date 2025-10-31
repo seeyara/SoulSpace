@@ -1,3 +1,8 @@
+import { supabase, prefixedTable } from '@/lib/supabase';
+import { format } from 'date-fns';
+import type { CuddleId } from '@/types/api';
+import { storage } from '../storage';
+
 // Fetch all chat entry dates for a user (for calendar/streak)
 export async function fetchUserChatDates(userId: string, dates: string[]) {
   const { data, error } = await supabase
@@ -6,23 +11,6 @@ export async function fetchUserChatDates(userId: string, dates: string[]) {
     .eq('user_id', userId)
     .in('date', dates);
   return { data, error };
-}
-import { supabase, prefixedTable } from '@/lib/supabase';
-import { format } from 'date-fns';
-import type { CuddleId } from '@/types/api';
-import { storage } from '../storage';
-
-export async function upsertFlatJournalEntry({ userId, cuddleId, content }: { userId: string, cuddleId: CuddleId, content: string }) {
-  const { error } = await supabase
-    .from(prefixedTable('chats'))
-    .insert({
-      user_id: userId,
-      cuddle_id: cuddleId,
-      messages: [{ role: 'user', content: content.trim() }],
-      date: format(new Date(), 'yyyy-MM-dd'),
-      mode: 'flat',
-    });
-  return { error };
 }
 
 export async function upsertGuidedJournalEntry({ userId, cuddleId, content }: { userId: string, cuddleId: CuddleId, content: string }) {
@@ -61,70 +49,165 @@ export async function fetchChatHistoryWithTempSessionId(tempSessionId: string, d
 }
 
 // USERS TABLE HELPERS
-export async function upsertUser({ userId, email, name, tempSessionId, cuddleId, cuddleName }: {
+interface UpsertUserProfileFields {
+  cuddleOwnership?: string;
+  gender?: string;
+  lifeStage?: string;
+}
+
+interface UpsertUserParams {
   email?: string;
   userId?: string;
   name?: string;
   tempSessionId?: string;
   cuddleId?: string;
   cuddleName?: string;
-}) {
+  profile?: UpsertUserProfileFields;
+  cuddleOwnership?: string;
+  gender?: string;
+  lifeStage?: string;
+}
+
+type SupabaseUserRow = {
+  id: string;
+  email?: string | null;
+  temp_session_id?: string | null;
+  name?: string | null;
+  cuddle_ownership?: string | null;
+  gender?: string | null;
+  life_stage?: string | null;
+  lifestage?: string | null;
+};
+
+export async function upsertUser({
+  userId,
+  email,
+  name,
+  tempSessionId,
+  cuddleId,
+  cuddleName,
+  profile,
+  cuddleOwnership,
+  gender,
+  lifeStage,
+}: UpsertUserParams) {
   let isExistingUser = false;
-  
-  // If email is provided, check if user already exists
-  if (email) {
-    const { data: existingUser } = await supabase
+  const normalizedEmail = typeof email === 'string' ? email.trim() : '';
+  const normalizedSessionId = typeof tempSessionId === 'string' ? tempSessionId.trim() : '';
+
+  let existingUser: SupabaseUserRow | null = null;
+
+  if (normalizedEmail) {
+    const { data } = await supabase
       .from(prefixedTable('users'))
       .select('*')
-      .eq('email', email)
+      .eq('email', normalizedEmail)
       .single();
-    
-    if (existingUser) {
-      console.log("Existing user found with email:", email);
-      storage.setUserId(existingUser.id);
+
+    if (data) {
+      existingUser = data;
       isExistingUser = true;
-      // Return existing user without creating new record
-      return { data: existingUser, error: null, isExistingUser };
     }
   }
 
-   // If tempSessionId is provided, check if user already exists
-  if (tempSessionId) {
-    const { data: existingUser } = await supabase
+  if (!existingUser && userId) {
+    const { data } = await supabase
       .from(prefixedTable('users'))
       .select('*')
-      .eq('temp_session_id', tempSessionId)
+      .eq('id', userId)
       .single();
-    
-    if (existingUser) {
-      console.log("Existing user found with tempSessionId:", tempSessionId);
-      storage.setUserId(existingUser.id);
+
+    if (data) {
+      existingUser = data;
       isExistingUser = true;
-      // Return existing user without creating new record
-      return { data: existingUser, error: null, isExistingUser };
     }
   }
-  
-  console.log("No existing user found. Creating new user.");
-  const upsertData: Record<string, any> = {};
-  if (email) upsertData.email = email;
-  if (userId) upsertData.id = userId;
-  if (name) upsertData.name = name;
-  if (tempSessionId) upsertData.temp_session_id = tempSessionId;
-  if (cuddleId) upsertData.cuddle_id = cuddleId;
-  if (cuddleName) upsertData.cuddle_name = cuddleName;
-  
+
+  if (!existingUser && normalizedSessionId) {
+    const { data } = await supabase
+      .from(prefixedTable('users'))
+      .select('*')
+      .eq('temp_session_id', normalizedSessionId)
+      .single();
+
+    if (data) {
+      existingUser = data;
+      isExistingUser = true;
+    }
+  }
+
+  if (!existingUser && !normalizedEmail) {
+    return {
+      data: null,
+      error: new Error('Email is required to create a new user.'),
+      isExistingUser: false,
+    };
+  }
+
+  const upsertData: Record<string, unknown> = {};
+
+  const targetId = existingUser?.id ?? userId;
+  if (targetId) {
+    upsertData.id = targetId;
+  }
+
+  if (normalizedEmail) {
+    upsertData.email = normalizedEmail;
+  }
+
+  if (name) {
+    upsertData.name = name;
+  }
+
+  if (normalizedSessionId) {
+    upsertData.temp_session_id = normalizedSessionId;
+  }
+
+  if (cuddleId) {
+    upsertData.cuddle_id = cuddleId;
+  }
+
+  if (cuddleName) {
+    upsertData.cuddle_name = cuddleName;
+  }
+
+  const mergedProfile: UpsertUserProfileFields = {
+    cuddleOwnership: profile?.cuddleOwnership ?? cuddleOwnership,
+    gender: profile?.gender ?? gender,
+    lifeStage: profile?.lifeStage ?? lifeStage,
+  };
+
+  if (mergedProfile.cuddleOwnership) {
+    upsertData.cuddle_ownership = mergedProfile.cuddleOwnership;
+  }
+  if (mergedProfile.gender) {
+    upsertData.gender = mergedProfile.gender;
+  }
+  if (mergedProfile.lifeStage) {
+    upsertData.life_stage = mergedProfile.lifeStage;
+  }
+
+  if (Object.keys(upsertData).length === 0) {
+    return {
+      data: existingUser,
+      error: null,
+      isExistingUser,
+    };
+  }
+
   const { data, error } = await supabase
     .from(prefixedTable('users'))
     .upsert([upsertData])
     .select()
     .single();
 
-  if (data) {
-    console.log('Created new user:', data.id);
-    storage.setUserId(data.id);
+  const resolvedUser = data ?? existingUser ?? null;
+
+  if (resolvedUser?.id) {
+    storage.setUserId(resolvedUser.id);
   }
-  return { data, error, isExistingUser };
+
+  return { data: resolvedUser, error, isExistingUser };
 }
 
 export async function fetchUserById(id: string) {
@@ -151,5 +234,93 @@ export async function fetchUserByEmail(email: string) {
     .select('*')
     .eq('email', email)
     .single();
+  return { data, error };
+}
+
+interface UpsertUserProfileParams {
+  userId?: string;
+  email?: string;
+  tempSessionId?: string;
+  profile: UpsertUserProfileFields;
+}
+
+const normalizeProfileForStorage = (profile: UpsertUserProfileFields) => {
+  const normalized: Record<string, string> = {};
+
+  if (profile.cuddleOwnership) {
+    normalized.cuddle_ownership = profile.cuddleOwnership;
+  }
+
+  if (profile.gender) {
+    normalized.gender = profile.gender;
+  }
+
+  if (profile.lifeStage) {
+    normalized.life_stage = profile.lifeStage;
+  }
+
+  return normalized;
+};
+
+export async function upsertUserProfile({ userId, email, tempSessionId, profile }: UpsertUserProfileParams) {
+  if (!userId && !email && !tempSessionId) {
+    throw new Error('A user identifier is required to update the profile.');
+  }
+
+  const profileData = normalizeProfileForStorage(profile);
+  const upsertData: Record<string, unknown> = {
+    ...profileData,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (userId) {
+    upsertData.id = userId;
+  }
+
+  if (email) {
+    upsertData.email = email;
+  }
+
+  if (tempSessionId) {
+    upsertData.temp_session_id = tempSessionId;
+  }
+
+  // Prefer matching by email, fallback to id if present
+  const conflictTarget = 'email';
+  console.log("Looking to update", upsertData);
+  const { data, error } = await supabase
+    .from(prefixedTable('users'))
+    .upsert(upsertData, { onConflict: conflictTarget })
+    .select('id, email, temp_session_id, cuddle_ownership, gender, life_stage, cuddle_name, cuddle_id, updated_at')
+    .single();
+
+  return { data, error };
+}
+
+interface FetchUserProfileParams {
+  userId?: string;
+  email?: string;
+  tempSessionId?: string;
+}
+
+export async function fetchUserProfile({ userId, email, tempSessionId }: FetchUserProfileParams) {
+  if (!userId && !email && !tempSessionId) {
+    throw new Error('A user identifier is required to fetch the profile.');
+  }
+
+  const query = supabase
+    .from(prefixedTable('users'))
+    .select('id, temp_session_id, cuddle_ownership, gender, life_stage, cuddle_name, cuddle_id');
+
+  if (userId) {
+    query.eq('id', userId);
+  } else if (email) {
+    query.eq('email', email);
+  } else if (tempSessionId) {
+    query.eq('temp_session_id', tempSessionId);
+  }
+
+  const { data, error } = await query.single();
+
   return { data, error };
 }

@@ -1,11 +1,9 @@
 'use client';
 
-// Feature flag for PrivacyModal
-const PRIVACY_MODAL_ENABLED = process.env.NEXT_PUBLIC_PRIVACY_MODAL_ENABLED === 'true';
-
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import BaseModal from './BaseModal';
+import { storage } from '@/lib/storage';
 
 interface PrivacyModalProps {
   isOpen: boolean;
@@ -19,8 +17,6 @@ interface UserProfile {
 }
 
 export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
-  if (!PRIVACY_MODAL_ENABLED) return null;
-
   const [step, setStep] = useState<'privacy' | 'cuddle' | 'gender' | 'lifeStage' | 'done'>('privacy');
   const [profile, setProfile] = useState<UserProfile>({
     cuddleOwnership: '',
@@ -28,6 +24,95 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
     lifeStage: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const applyProfileState = useCallback((incoming?: Partial<UserProfile> & { lifestage?: string; life_stage?: string }) => {
+    if (!incoming) {
+      setStep('privacy');
+      setProfile({ cuddleOwnership: '', gender: '', lifeStage: '' });
+      return;
+    }
+
+    const nextProfile: UserProfile = {
+      cuddleOwnership: incoming.cuddleOwnership ?? '',
+      gender: incoming.gender ?? '',
+      lifeStage: incoming.lifeStage ?? incoming.lifestage ?? incoming.life_stage ?? '',
+    };
+
+    setProfile(nextProfile);
+
+    if (nextProfile.cuddleOwnership && nextProfile.gender && nextProfile.lifeStage) {
+      setStep('done');
+    } else if (nextProfile.cuddleOwnership && nextProfile.gender) {
+      setStep('lifeStage');
+    } else if (nextProfile.cuddleOwnership) {
+      setStep('gender');
+    } else {
+      setStep('privacy');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') {
+      return;
+    }
+
+    const hydrateProfile = async () => {
+      const storedProfile = localStorage.getItem('user_profile');
+      if (storedProfile) {
+        try {
+          const parsed = JSON.parse(storedProfile) as Partial<UserProfile> & { lifestage?: string; life_stage?: string };
+          applyProfileState(parsed);
+        } catch (error) {
+          console.error('Failed to parse stored profile:', error);
+          applyProfileState();
+        }
+      } else {
+        applyProfileState();
+      }
+
+      const storedUserId = localStorage.getItem('soul_journal_user_id');
+      const storedSessionId = localStorage.getItem('soul_journal_session_id');
+      const storedEmail = storage.getEmail();
+
+      if (!storedUserId && !storedEmail && !storedSessionId) {
+        return;
+      }
+
+      const params = new URLSearchParams();
+      if (storedUserId) {
+        params.set('userId', storedUserId);
+      }
+      if (storedSessionId) {
+        params.set('tempSessionId', storedSessionId);
+      }
+      if (storedEmail) {
+        params.set('email', storedEmail);
+      }
+
+      try {
+        const response = await fetch(`/api/users/profile?${params.toString()}`);
+        if (!response.ok) {
+          return;
+        }
+
+        type RemoteProfile = Partial<UserProfile> & { life_stage?: string; lifestage?: string };
+        const { profile: remoteProfile } = await response.json() as { profile?: RemoteProfile | null };
+        if (remoteProfile) {
+          const normalized: UserProfile = {
+            cuddleOwnership: remoteProfile.cuddleOwnership ?? '',
+            gender: remoteProfile.gender ?? '',
+            lifeStage: remoteProfile.lifeStage ?? remoteProfile.lifestage ?? remoteProfile.life_stage ?? '',
+          };
+          localStorage.setItem('user_profile', JSON.stringify(normalized));
+          applyProfileState(normalized);
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile from database:', error);
+      }
+    };
+
+    hydrateProfile();
+  }, [isOpen, applyProfileState]);
 
   const handleProfileChange = (field: keyof UserProfile, value: string) => {
     setProfile(prev => ({
@@ -63,16 +148,32 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
     try {
       localStorage.setItem('user_profile', JSON.stringify(profile));
       const userId = localStorage.getItem('soul_journal_user_id');
-      console.log('Submitting profile to API:', { userId, profile });
-      if (userId) {
+      const tempSessionId = localStorage.getItem('soul_journal_session_id');
+      const email = storage.getEmail();
+
+      if (userId || email || tempSessionId) {
+        const payload: Record<string, unknown> = { profile };
+        if (userId) {
+          payload.userId = userId;
+        }
+        if (email) {
+          payload.email = email;
+        }
+        if (tempSessionId) {
+          payload.tempSessionId = tempSessionId;
+        }
+
         const response = await fetch('/api/users/profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, profile }),
+          body: JSON.stringify(payload),
         });
         if (!response.ok) {
           console.error('Failed to save profile to database');
         }
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('soul:profile-updated'));
       }
       setTimeout(() => { onClose(); }, 1000);
     } catch (error) {

@@ -14,12 +14,20 @@ export const ChatCompletionRequestSchema = z.object({
     errorMap: () => ({ message: 'Invalid cuddle ID' })
   }),
   messageHistory: z.array(ChatMessageSchema).max(100, 'Message history too long'),
-  forceEnd: z.boolean().optional()
+  forceEnd: z.boolean().optional(),
+  userId: z.string().uuid('Invalid user ID format').optional(),
+  tempSessionId: z.string().min(1, 'Session identifier is required').optional()
 }).refine(
   (data) => data.message || data.forceEnd || data.message === "_finish_entry_",
   {
     message: 'Message is required unless forcing end',
     path: ['message']
+  }
+).refine(
+  (data) => Boolean(data.userId || data.tempSessionId),
+  {
+    message: 'User or session identifier is required',
+    path: ['userId']
   }
 );
 
@@ -29,9 +37,6 @@ export const CompleteJournalRequestSchema = z.object({
     errorMap: () => ({ message: 'Invalid cuddle ID' })
   }),
   messages: z.array(ChatMessageSchema).min(1, 'At least one message is required').max(200, 'Too many messages'),
-  mode: z.enum(['guided', 'flat'], {
-    errorMap: () => ({ message: 'Invalid mode' })
-  }).default('guided'),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)'),
 });
 
@@ -42,9 +47,6 @@ export const SaveChatRequestSchema = z.object({
   cuddleId: z.enum(['ellie-sr', 'olly-sr', 'ellie-jr', 'olly-jr'], {
     errorMap: () => ({ message: 'Invalid cuddle ID' })
   }),
-  mode: z.enum(['guided', 'flat'], {
-    errorMap: () => ({ message: 'Invalid mode' })
-  }).default('flat'),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)').optional()
 });
 

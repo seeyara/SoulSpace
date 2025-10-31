@@ -15,7 +15,7 @@ export const POST = withErrorHandler(async (request: Request) => {
       { status: 400 }
     );
   }
-  const { userId, cuddleId, messages, mode, date } = validateRequestBody(CompleteJournalRequestSchema)(body);
+  const { userId, cuddleId, messages, date } = validateRequestBody(CompleteJournalRequestSchema)(body);
 
   const sanitizedMessages = messages
     .map(message => ({
@@ -41,7 +41,6 @@ export const POST = withErrorHandler(async (request: Request) => {
     messages: finalMessages,
     userId,
     cuddleId,
-    mode,
     date,
   });
 

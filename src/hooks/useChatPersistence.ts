@@ -12,7 +12,6 @@ export type PersistableMessage = {
 interface ChatPersistenceOptions {
   userId?: string;
   cuddleId: CuddleId;
-  mode: 'guided' | 'flat';
   date?: string;
   storageEnabled?: boolean;
   debounceMs?: number;
@@ -20,7 +19,6 @@ interface ChatPersistenceOptions {
 
 interface QueuePersistenceOptions {
   immediate?: boolean;
-  mode?: 'guided' | 'flat';
   cuddleId?: CuddleId;
   date?: string;
   saveToStorage?: boolean;
@@ -38,14 +36,13 @@ interface ChatPersistenceService {
 export function useChatPersistence({
   userId,
   cuddleId,
-  mode,
   date,
   storageEnabled = true,
   debounceMs = 800
 }: ChatPersistenceOptions): ChatPersistenceService {
   const latestMessagesRef = useRef<PersistableMessage[]>([]);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const contextRef = useRef({ userId, cuddleId, mode, date });
+  const contextRef = useRef({ userId, cuddleId, date });
 
   useEffect(() => {
     contextRef.current.userId = userId;
@@ -56,10 +53,6 @@ export function useChatPersistence({
   }, [cuddleId]);
 
   useEffect(() => {
-    contextRef.current.mode = mode;
-  }, [mode]);
-
-  useEffect(() => {
     contextRef.current.date = date;
   }, [date]);
 
@@ -67,7 +60,6 @@ export function useChatPersistence({
     const {
       userId: activeUserId,
       cuddleId: activeCuddleId,
-      mode: activeMode,
       date: activeDate,
     } = contextRef.current;
 
@@ -83,7 +75,9 @@ export function useChatPersistence({
       }))
       .filter(message => message.content.trim().length > 0);
 
-    if (sanitizedMessages.length === 0) {
+    const hasUserMessage = sanitizedMessages.some(message => message.role === 'user');
+
+    if (sanitizedMessages.length === 0 || !hasUserMessage) {
       return true;
     }
 
@@ -92,7 +86,6 @@ export function useChatPersistence({
         messages: sanitizedMessages,
         userId: activeUserId,
         cuddleId: activeCuddleId,
-        mode: activeMode,
         date: activeDate,
       });
 
@@ -116,10 +109,6 @@ export function useChatPersistence({
 
       latestMessagesRef.current = effectiveMessages;
 
-      if (options?.mode) {
-        contextRef.current.mode = options.mode;
-      }
-
       if (options?.cuddleId) {
         contextRef.current.cuddleId = options.cuddleId;
       }
@@ -129,8 +118,15 @@ export function useChatPersistence({
       }
 
       const shouldStore = options?.saveToStorage ?? storageEnabled;
+      const hasUserMessage = effectiveMessages.some(
+        message =>
+          message.role === 'user' &&
+          typeof message.content === 'string' &&
+          message.content.trim().length > 0
+      );
+
       if (shouldStore) {
-        if (effectiveMessages.length > 0) {
+        if (hasUserMessage) {
           storage.setOngoingConversation({
             messages: effectiveMessages,
             cuddle: contextRef.current.cuddleId
@@ -143,6 +139,10 @@ export function useChatPersistence({
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
+      }
+
+      if (!hasUserMessage) {
+        return Promise.resolve(true);
       }
 
       if (options?.immediate) {
