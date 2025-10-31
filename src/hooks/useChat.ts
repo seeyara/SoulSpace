@@ -5,6 +5,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import axios, { AxiosError } from 'axios';
 import { storage } from '@/lib/storage';
 import { useChatPersistence } from '@/hooks/useChatPersistence';
+import type { PersistableMessage } from '@/hooks/useChatPersistence';
 import type { CuddleId } from '@/types/api';
 
 export interface ChatMessage {
@@ -53,7 +54,6 @@ export function useChat({
   const { queuePersistence, flushBeforeUnload, clearPersistence } = useChatPersistence({
     userId,
     cuddleId,
-    mode: 'guided',
     date: entryDate,
     storageEnabled: saveToStorage
   });
@@ -293,7 +293,9 @@ export function useChat({
       return;
     }
 
-    const persistableMessages = state.messages.filter(msg => msg.status !== 'failed');
+    const persistableMessages: PersistableMessage[] = state.messages
+      .filter(msg => msg.status !== 'failed')
+      .map(({ role, content }) => ({ role, content }));
     if (persistableMessages.length > 0) {
       queuePersistence(persistableMessages);
     } else if (state.messages.length === 0) {

@@ -169,10 +169,10 @@ export async function fetchPaginatedChatHistory(
   }
 
   const entries = (data || []).map(item => ({
-    date: item.date,
-    messages: item.messages || [],
-    cuddleId: item.cuddle_id,
-    mode: item.mode === 'guided' ? 'guided' : undefined
+    date: String(item.date),
+    messages: (item.messages || []) as ChatMessage[],
+    cuddleId: String(item.cuddle_id),
+    mode: item.mode === 'guided' ? ('guided' as const) : undefined
   }));
 
   const hasMore = entries.length === limit;

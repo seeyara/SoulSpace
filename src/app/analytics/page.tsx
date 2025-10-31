@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { DayPicker } from 'react-day-picker';
+import { DayPicker, type DateRange } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 
 interface AnalyticsData {
@@ -13,9 +13,9 @@ interface AnalyticsData {
 }
 
 export default function AnalyticsPage() {
-    const [dateRange, setDateRange] = useState<{ start: Date | undefined; end: Date | undefined }>({
-    start: undefined,
-    end: undefined,
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: undefined,
+    to: undefined,
   });
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,9 +25,9 @@ export default function AnalyticsPage() {
     fetchAnalytics();
   }, []);
 
-  const handleDateChange = (range: { from: Date; to: Date }) => {
-    setDateRange({ start: range.from, end: range.to });
-    fetchAnalytics(range.from, range.to);
+  const handleDateChange = (range: DateRange | undefined) => {
+    setDateRange(range);
+    fetchAnalytics(range?.from, range?.to);
   };
 
 
@@ -102,8 +102,9 @@ export default function AnalyticsPage() {
     );
   }
 
-  const maxDaily = Math.max(...data.dailyActiveJournalers.map(d => d.activeUsers));
-  const maxEngagement = Math.max(...data.promptEngagement.map(p => p.count));
+  const d = data!;
+  const maxDaily = Math.max(...d.dailyActiveJournalers.map(j => j.activeUsers));
+  const maxEngagement = Math.max(...d.promptEngagement.map(p => p.count));
 
   return (
     <div className="min-h-screen p-6 overflow-x-hidden">
@@ -117,27 +118,27 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="rounded-lg p-6 shadow-sm border border-slate-200 bg-white">
             <h3 className="text-sm font-medium text-[#9B046F] mb-2">🌟 Total Unique Users</h3>
-            <p className="text-3xl font-bold text-[#9B046F]">{data.totalUniqueUsers}</p>
+            <p className="text-3xl font-bold text-[#9B046F]">{d.totalUniqueUsers}</p>
           </div>
           
           <div className="rounded-lg p-6 shadow-sm border border-slate-200 bg-white">
             <h3 className="text-sm font-medium text-[#9B046F] mb-2">🔥 Active This Week</h3>
             <p className="text-3xl font-bold text-[#9B046F]">
-              {data.cohortRetention[data.cohortRetention.length - 1]?.activeUsers || 0}
+              {d.cohortRetention[d.cohortRetention.length - 1]?.activeUsers || 0}
             </p>
           </div>
           
           <div className="rounded-lg p-6 shadow-sm border border-slate-200 bg-white">
             <h3 className="text-sm font-medium text-[#9B046F] mb-2">🏆 Top Streak</h3>
             <p className="text-3xl font-bold text-[#9B046F]">
-              {data.streakLeaderboard[0]?.streak || 0} days
+              {d.streakLeaderboard[0]?.streak || 0} days
             </p>
           </div>
           
           <div className="rounded-lg p-6 shadow-sm border border-slate-200 bg-white">
             <h3 className="text-sm font-medium text-[#9B046F] mb-2">📅 Total Sessions</h3>
             <p className="text-3xl font-bold text-[#9B046F]">
-              {data.promptEngagement.reduce((sum, p) => sum + p.count, 0)}
+              {d.promptEngagement.reduce((sum, p) => sum + p.count, 0)}
             </p>
           </div>
         </div>
@@ -163,8 +164,8 @@ export default function AnalyticsPage() {
                   fill="url(#gradient)"
                   stroke="#FF6B6B"
                   strokeWidth="2"
-                  points={data.dailyActiveJournalers.map((d, i) => 
-                    `${(i / (data.dailyActiveJournalers.length - 1)) * 400},${200 - (d.activeUsers / (maxDaily || 1)) * 180}`
+                  points={d.dailyActiveJournalers.map((dj, i) => 
+                    `${(i / (d.dailyActiveJournalers.length - 1)) * 400},${200 - (dj.activeUsers / (maxDaily || 1)) * 180}`
                   ).join(' ')}
                 />
               </svg>
@@ -175,7 +176,7 @@ export default function AnalyticsPage() {
           <div className="rounded-lg p-6 shadow-sm border border-slate-200 bg-white">
             <h3 className="text-lg font-semibold text-[#9B046F] mb-3">📅 Weekly Cohort Retention</h3>
             <div className="space-y-2">
-              {data.cohortRetention.map((cohort, i) => (
+              {d.cohortRetention.map((cohort, i) => (
                 <div key={i} className="flex items-center justify-between">
                   <span className="text-[#9B046F] font-medium">{cohort.week}</span>
                   <div className="flex items-center space-x-2">
@@ -199,7 +200,7 @@ export default function AnalyticsPage() {
           <div className="rounded-lg p-6 shadow-sm border border-slate-200 bg-white">
             <h3 className="text-lg font-semibold text-[#9B046F] mb-4">🏅 Streak Leaderboard</h3>
             <div className="space-y-3">
-              {data.streakLeaderboard.map((user, i) => (
+              {d.streakLeaderboard.map((user, i) => (
                 <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                   <div className="flex items-center space-x-3">
                     <span className="text-lg font-bold text-[#9B046F]">#{i + 1}</span>
@@ -218,7 +219,7 @@ export default function AnalyticsPage() {
           <div className="rounded-lg p-6 shadow-sm border border-slate-200 bg-white">
             <h3 className="text-lg font-semibold text-[#9B046F] mb-4">🤖 Companion Usage</h3>
             <div className="space-y-4">
-              {data.promptEngagement.map((prompt, i) => (
+              {d.promptEngagement.map((prompt, i) => (
                 <div key={i} className="flex items-center justify-between">
                   <span className="text-[#9B046F] font-medium">{prompt.prompt}</span>
                   <div className="flex items-center space-x-3">
