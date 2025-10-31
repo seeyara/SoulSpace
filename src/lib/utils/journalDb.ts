@@ -239,6 +239,7 @@ export async function fetchUserByEmail(email: string) {
 
 interface UpsertUserProfileParams {
   userId?: string;
+  email?: string;
   tempSessionId?: string;
   profile: UpsertUserProfileFields;
 }
@@ -261,31 +262,36 @@ const normalizeProfileForStorage = (profile: UpsertUserProfileFields) => {
   return normalized;
 };
 
-export async function upsertUserProfile({ userId, tempSessionId, profile }: UpsertUserProfileParams) {
-  if (!userId && !tempSessionId) {
+export async function upsertUserProfile({ userId, email, tempSessionId, profile }: UpsertUserProfileParams) {
+  if (!userId && !email && !tempSessionId) {
     throw new Error('A user identifier is required to update the profile.');
   }
 
   const profileData = normalizeProfileForStorage(profile);
   const upsertData: Record<string, unknown> = {
     ...profileData,
-    updated_at: format(new Date(), 'yyyy-MM-dd'),
+    updated_at: new Date().toISOString(),
   };
 
   if (userId) {
     upsertData.id = userId;
   }
 
+  if (email) {
+    upsertData.email = email;
+  }
+
   if (tempSessionId) {
     upsertData.temp_session_id = tempSessionId;
   }
 
-  const conflictTarget = userId ? 'id' : 'temp_session_id';
-
+  // Prefer matching by email, fallback to id if present
+  const conflictTarget = 'email';
+  console.log("Looking to update", upsertData);
   const { data, error } = await supabase
     .from(prefixedTable('users'))
     .upsert(upsertData, { onConflict: conflictTarget })
-    .select('id, temp_session_id, cuddle_ownership, gender, life_stage, cuddle_name, cuddle_id')
+    .select('id, email, temp_session_id, cuddle_ownership, gender, life_stage, cuddle_name, cuddle_id, updated_at')
     .single();
 
   return { data, error };
@@ -293,11 +299,12 @@ export async function upsertUserProfile({ userId, tempSessionId, profile }: Upse
 
 interface FetchUserProfileParams {
   userId?: string;
+  email?: string;
   tempSessionId?: string;
 }
 
-export async function fetchUserProfile({ userId, tempSessionId }: FetchUserProfileParams) {
-  if (!userId && !tempSessionId) {
+export async function fetchUserProfile({ userId, email, tempSessionId }: FetchUserProfileParams) {
+  if (!userId && !email && !tempSessionId) {
     throw new Error('A user identifier is required to fetch the profile.');
   }
 
@@ -307,6 +314,8 @@ export async function fetchUserProfile({ userId, tempSessionId }: FetchUserProfi
 
   if (userId) {
     query.eq('id', userId);
+  } else if (email) {
+    query.eq('email', email);
   } else if (tempSessionId) {
     query.eq('temp_session_id', tempSessionId);
   }

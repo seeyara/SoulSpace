@@ -4,7 +4,7 @@ import { withRateLimit } from '@/lib/rateLimiter';
 
 export const POST = withRateLimit('users', async (request: Request) => {
   try {
-    const { userId, name, cuddleId, cuddleName } = await request.json();
+    const { userId, name, cuddleId, cuddleName, cuddleOwnership, lifeStage, gender } = await request.json();
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
@@ -24,7 +24,10 @@ export const POST = withRateLimit('users', async (request: Request) => {
       userId: cleanUserId, // Pass cleaned userId here
       name: name,
       cuddleId: cuddleId,
-      cuddleName: cuddleName
+      cuddleName: cuddleName,
+      cuddleOwnership: cuddleOwnership,
+      lifeStage: lifeStage,
+      gender: gender
     });
     if (error) {
       console.error('Supabase error:', error);

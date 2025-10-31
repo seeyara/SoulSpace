@@ -4,7 +4,7 @@ import { withRateLimit } from '@/lib/rateLimiter';
 
 export const POST = withRateLimit('users', async (request: Request) => {
   try {
-    const { userId, tempSessionId, profile } = await request.json();
+    const { userId, tempSessionId, email, profile } = await request.json();
 
     if (!profile || (!userId && !tempSessionId)) {
       return NextResponse.json(
@@ -20,8 +20,13 @@ export const POST = withRateLimit('users', async (request: Request) => {
       ? tempSessionId.toString().trim().replace(/^"+|"+$/g, '')
       : undefined;
 
+    const cleanEmail = typeof email === 'string'
+      ? email.trim().replace(/^"+|"+$/g, '').toLowerCase()
+      : undefined;
+
     const { data, error } = await upsertUserProfile({
       userId: cleanUserId,
+      email: cleanEmail,
       tempSessionId: cleanTempSessionId,
       profile,
     });
@@ -60,8 +65,9 @@ export const GET = withRateLimit('users', async (request: Request) => {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const tempSessionId = searchParams.get('tempSessionId');
+    const email = searchParams.get('email');
 
-    if (!userId && !tempSessionId) {
+    if (!userId && !email && !tempSessionId) {
       return NextResponse.json({ error: 'A user identifier is required' }, { status: 400 });
     }
 
@@ -72,9 +78,14 @@ export const GET = withRateLimit('users', async (request: Request) => {
       ? tempSessionId.toString().trim().replace(/^"+|"+$/g, '')
       : undefined;
 
+    const cleanEmail = email
+      ? email.toString().trim().replace(/^"+|"+$/g, '').toLowerCase()
+      : undefined;
+
     const { data, error } = await fetchUserProfile({
       userId: cleanUserId,
       tempSessionId: cleanTempSessionId,
+      email: cleanEmail,
     });
 
     if (error) {

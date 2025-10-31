@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { supabase, prefixedTable } from '@/lib/supabase';
-import { fetchUserByTempSessionId, fetchUserById } from '@/lib/utils/journalDb';
+import { fetchUserById } from '@/lib/utils/journalDb';
 import { format } from 'date-fns';
 import { calculateStreak, getDaysInMonth, getCuddleImage, getCuddleName } from '@/lib/utils/accountUtils';
 import { useRouter } from 'next/navigation';

@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { useCallback, useEffect, useState } from 'react';
 import BaseModal from './BaseModal';
+import { storage } from '@/lib/storage';
 
 interface PrivacyModalProps {
   isOpen: boolean;
@@ -71,8 +72,9 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
 
       const storedUserId = localStorage.getItem('soul_journal_user_id');
       const storedSessionId = localStorage.getItem('soul_journal_session_id');
+      const storedEmail = storage.getEmail();
 
-      if (!storedUserId && !storedSessionId) {
+      if (!storedUserId && !storedEmail && !storedSessionId) {
         return;
       }
 
@@ -82,6 +84,9 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
       }
       if (storedSessionId) {
         params.set('tempSessionId', storedSessionId);
+      }
+      if (storedEmail) {
+        params.set('email', storedEmail);
       }
 
       try {
@@ -144,11 +149,15 @@ export default function PrivacyModal({ isOpen, onClose }: PrivacyModalProps) {
       localStorage.setItem('user_profile', JSON.stringify(profile));
       const userId = localStorage.getItem('soul_journal_user_id');
       const tempSessionId = localStorage.getItem('soul_journal_session_id');
+      const email = storage.getEmail();
 
-      if (userId || tempSessionId) {
+      if (userId || email || tempSessionId) {
         const payload: Record<string, unknown> = { profile };
         if (userId) {
           payload.userId = userId;
+        }
+        if (email) {
+          payload.email = email;
         }
         if (tempSessionId) {
           payload.tempSessionId = tempSessionId;
